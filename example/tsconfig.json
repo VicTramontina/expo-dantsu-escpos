@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "expo-dantsu-escpos": ["../src/index"],
+      "expo-dantsu-escpos/*": ["../src/*"]
+    }
+  }
+}

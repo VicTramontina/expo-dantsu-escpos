@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["ExpoDantsuEscposModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.dantsuescpos.ExpoDantsuEscposModule"]
+  }
+}
