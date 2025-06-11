@@ -1,0 +1,8 @@
+{
+  "android": {
+    "package": "com.anonymous.expodantsuescpos"
+  },
+  "ios": {
+    "bundleIdentifier": "com.anonymous.expodantsuescpos"
+  }
+}
