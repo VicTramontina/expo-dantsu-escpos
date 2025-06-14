@@ -2,8 +2,16 @@ package expo.modules.dantsuescpos
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.hardware.usb.UsbManager
+import android.os.Build
 import android.util.Base64
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.exception.CodedException
@@ -14,9 +22,60 @@ import com.dantsu.escposprinter.connection.tcp.TcpConnection
 import com.dantsu.escposprinter.connection.usb.UsbPrintersConnections
 import com.dantsu.escposprinter.connection.usb.UsbConnection
 import com.dantsu.escposprinter.textparser.PrinterTextParserImg
+import android.Manifest
 
 class ExpoDantsuEscposModule : Module() {
     private var printer: EscPosPrinter? = null
+    private val BLUETOOTH_PERMISSION_REQUEST_CODE = 1
+    private val ACTION_USB_PERMISSION = "com.github.expo.modules.dantsuescpos.USB_PERMISSION"
+
+    private fun checkBluetoothPermissions(): Boolean {
+        val activity = appContext.activityProvider?.currentActivity ?: return false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val bluetoothConnect = ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_CONNECT)
+            if (bluetoothConnect != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    activity,
+                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                    BLUETOOTH_PERMISSION_REQUEST_CODE
+                )
+                return false
+            }
+        } else {
+            val bluetoothAdmin = ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_ADMIN)
+            if (bluetoothAdmin != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    activity,
+                    arrayOf(Manifest.permission.BLUETOOTH_ADMIN),
+                    BLUETOOTH_PERMISSION_REQUEST_CODE
+                )
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun checkUsbPermissions(usbConnection: UsbConnection): Boolean {
+        val activity = appContext.activityProvider?.currentActivity ?: return false
+        val usbManager = activity.getSystemService(Context.USB_SERVICE) as UsbManager
+
+        if (!usbManager.hasPermission(usbConnection.device)) {
+            val permissionIntent = PendingIntent.getBroadcast(
+                activity,
+                0,
+                Intent(ACTION_USB_PERMISSION),
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+            )
+            usbManager.requestPermission(usbConnection.device, permissionIntent)
+            return false
+        }
+        return true
+    }
 
     @SuppressLint("MissingPermission")
     override fun definition() = ModuleDefinition {
@@ -24,6 +83,10 @@ class ExpoDantsuEscposModule : Module() {
 
         // List paired Bluetooth printers
         AsyncFunction("getBluetoothDevices") {
+            if (!checkBluetoothPermissions()) {
+                throw CodedException("E_BT_PERMISSION", RuntimeException("Bluetooth permissions not granted"))
+            }
+
             val connections = BluetoothPrintersConnections()
             val list = connections.getList()
             list?.map {
@@ -50,8 +113,12 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         // Connect via Bluetooth (address optional)
-        Function("connectBluetooth") { address: String? ->
+        AsyncFunction("connectBluetooth") { address: String?, printerDpi: Int?, printerWidthMM: Float?, printerNbrCharactersPerLine: Int? ->
             try {
+                if (!checkBluetoothPermissions()) {
+                    throw CodedException("E_BT_PERMISSION", RuntimeException("Bluetooth permissions not granted"))
+                }
+
                 val connDevice: BluetoothConnection = if (address.isNullOrEmpty()) {
                     BluetoothPrintersConnections.selectFirstPaired()
                         ?: throw CodedException("E_NO_BT_PRINTER", RuntimeException("No paired Bluetooth printer"))
@@ -61,17 +128,24 @@ class ExpoDantsuEscposModule : Module() {
                         ?.firstOrNull { it.device.address == address }
                         ?: throw CodedException("E_NO_BT_PRINTER", RuntimeException("Printer '$address' not found"))
                 }
-                printer = EscPosPrinter(connDevice, 203, 48f, 32)
+
+                printer = EscPosPrinter(
+                    connDevice,
+                    printerDpi ?: 203,
+                    printerWidthMM ?: 48f,
+                    printerNbrCharactersPerLine ?: 32
+                )
             } catch (e: Exception) {
                 throw CodedException("E_BT_CONNECT", e)
             }
         }
 
         // Connect via USB
-        Function("connectUsb") { vendorId: Int?, productId: Int? ->
+        AsyncFunction("connectUsb") { vendorId: Int?, productId: Int?, printerDpi: Int?, printerWidthMM: Float?, printerNbrCharactersPerLine: Int? ->
             try {
                 val activity: Activity = appContext.activityProvider?.currentActivity
                     ?: throw CodedException("E_NO_ACTIVITY", RuntimeException("Activity unavailable"))
+
                 val connDevice: UsbConnection = if (vendorId != null && productId != null) {
                     val connections = UsbPrintersConnections(activity)
                     connections.getList()
@@ -84,17 +158,32 @@ class ExpoDantsuEscposModule : Module() {
                     UsbPrintersConnections.selectFirstConnected(activity)
                         ?: throw CodedException("E_NO_USB_PRINTER", RuntimeException("No USB printer connected"))
                 }
-                printer = EscPosPrinter(connDevice, 203, 48f, 32)
+
+                if (!checkUsbPermissions(connDevice)) {
+                    throw CodedException("E_USB_PERMISSION", RuntimeException("USB permissions not granted"))
+                }
+
+                printer = EscPosPrinter(
+                    connDevice,
+                    printerDpi ?: 203,
+                    printerWidthMM ?: 48f,
+                    printerNbrCharactersPerLine ?: 32
+                )
             } catch (e: Exception) {
                 throw CodedException("E_USB_CONNECT", e)
             }
         }
 
         // Connect via TCP
-        Function("connectTcp") { address: String, port: Int, timeout: Int? ->
+        Function("connectTcp") { address: String, port: Int, timeout: Int?, printerDpi: Int?, printerWidthMM: Float?, printerNbrCharactersPerLine: Int? ->
             try {
                 val conn = timeout?.let { TcpConnection(address, port, it) } ?: TcpConnection(address, port)
-                printer = EscPosPrinter(conn, 203, 48f, 32)
+                printer = EscPosPrinter(
+                    conn,
+                    printerDpi ?: 203,
+                    printerWidthMM ?: 48f,
+                    printerNbrCharactersPerLine ?: 32
+                )
             } catch (e: Exception) {
                 throw CodedException("E_TCP_CONNECT", e)
             }
@@ -203,3 +292,4 @@ class ExpoDantsuEscposModule : Module() {
         }
     }
 }
+
