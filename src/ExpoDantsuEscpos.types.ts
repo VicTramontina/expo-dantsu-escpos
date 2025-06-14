@@ -21,6 +21,12 @@ export type UsbDevice = {
   productId: number;
 };
 
+export interface TcpDevice {
+  address: string;
+  port: number;
+  status: string;
+}
+
 export type PrinterInfo = {
   dpi: number;
   widthMM: number;
@@ -32,6 +38,8 @@ export interface ExpoDantsuEscposModule {
   getBluetoothDevices(): Promise<BluetoothDevice[]>;
 
   getUsbDevices(): Promise<UsbDevice[]>;
+
+  getTcpDevices(): Promise<TcpDevice[]>;
 
   connectBluetooth(address?: string): Promise<void>;
 

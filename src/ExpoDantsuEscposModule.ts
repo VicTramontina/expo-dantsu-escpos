@@ -5,6 +5,7 @@ import type {
   BluetoothDevice,
   UsbDevice,
   PrinterInfo,
+  TcpDevice,
 } from "./ExpoDantsuEscpos.types";
 
 declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModuleEvents> {
@@ -13,6 +14,9 @@ declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModule
 
   /** List connected USB printers */
   getUsbDevices(): Promise<UsbDevice[]>;
+
+  /** List connected TCP printers */
+  getTcpDevices(): Promise<TcpDevice[]>;
 
   /** Connect to the first paired Bluetooth printer or by address */
   connectBluetooth(address?: string): Promise<void>;

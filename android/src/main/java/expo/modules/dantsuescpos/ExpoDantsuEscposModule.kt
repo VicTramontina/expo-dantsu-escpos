@@ -23,6 +23,21 @@ import com.dantsu.escposprinter.connection.usb.UsbPrintersConnections
 import com.dantsu.escposprinter.connection.usb.UsbConnection
 import com.dantsu.escposprinter.textparser.PrinterTextParserImg
 import android.Manifest
+import android.net.wifi.WifiManager
+import java.net.Inet4Address
+import java.net.InetAddress
+import java.net.NetworkInterface
+import java.net.Socket
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 class ExpoDantsuEscposModule : Module() {
     private var printer: EscPosPrinter? = null
@@ -77,9 +92,125 @@ class ExpoDantsuEscposModule : Module() {
         return true
     }
 
+    private fun checkNetworkPermissions(): Boolean {
+        val activity = appContext.activityProvider?.currentActivity ?: return false
+
+        // Check for internet permission
+        val internetPermission = ContextCompat.checkSelfPermission(activity, Manifest.permission.INTERNET)
+        if (internetPermission != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+
+        // Check for network state permission
+        val networkStatePermission = ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_NETWORK_STATE)
+        if (networkStatePermission != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.ACCESS_NETWORK_STATE),
+                2 // Using a different request code than Bluetooth
+            )
+            return false
+        }
+
+        return true
+    }
+
+    // Common printer ports
+    private val COMMON_PRINTER_PORTS = listOf(9100, 515, 631)
+    private val CONNECTION_TIMEOUT_MS = 300 // Short timeout for quick scanning
+
+    private fun getLocalIpAddress(): String? {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (!address.isLoopbackAddress && address is Inet4Address) {
+                        return address.hostAddress
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    private fun getSubnetPrefix(ipAddress: String): String? {
+        val lastDotIndex = ipAddress.lastIndexOf('.')
+        return if (lastDotIndex > 0) {
+            ipAddress.substring(0, lastDotIndex + 1)
+        } else {
+            null
+        }
+    }
+
+    private suspend fun scanForPrinters(): List<Map<String, Any>> = coroutineScope {
+        val localIp = getLocalIpAddress() ?: return@coroutineScope emptyList()
+        val subnetPrefix = getSubnetPrefix(localIp) ?: return@coroutineScope emptyList()
+
+        val discoveredPrinters = mutableListOf<Map<String, Any>>()
+
+        // Create tasks for all IP addresses in subnet (1-254) for common printer ports
+        val scanTasks = mutableListOf<kotlinx.coroutines.Deferred<Map<String, Any>?>>()
+
+        for (i in 1..254) {
+            val ip = "$subnetPrefix$i"
+
+            // Skip local IP (no need to scan ourselves)
+            if (ip == localIp) continue
+
+            for (port in COMMON_PRINTER_PORTS) {
+                scanTasks.add(async(Dispatchers.IO) {
+                    try {
+                        val socket = Socket()
+                        socket.connect(java.net.InetSocketAddress(ip, port), CONNECTION_TIMEOUT_MS)
+                        socket.close()
+                        // If connection succeeded, this could be a printer
+                        mapOf(
+                            "address" to ip,
+                            "port" to port,
+                            "status" to "available"
+                        )
+                    } catch (e: Exception) {
+                        null // Connection failed, not a printer or not accessible
+                    }
+                })
+            }
+        }
+
+        // Wait for all scan tasks to complete and filter out null results
+        scanTasks.awaitAll().filterNotNull().forEach {
+            discoveredPrinters.add(it)
+        }
+
+        discoveredPrinters
+    }
+
     @SuppressLint("MissingPermission")
     override fun definition() = ModuleDefinition {
         Name("ExpoDantsuEscposModule")
+
+        // List TCP printers on the network
+        AsyncFunction("getTcpDevices") {
+            try {
+                val activity: Activity = appContext.activityProvider?.currentActivity
+                    ?: throw CodedException("E_NO_ACTIVITY", RuntimeException("Activity unavailable"))
+
+                if (!checkNetworkPermissions()) {
+                    throw CodedException("E_NETWORK_PERMISSION", RuntimeException("Network permissions not granted"))
+                }
+
+                kotlinx.coroutines.runBlocking {
+                    scanForPrinters()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ExpoDantsuEscposModule", "TCP scan error: ${e.message}", e)
+                throw CodedException("E_TCP_SCAN", e)
+            }
+        }
 
         // List paired Bluetooth printers
         AsyncFunction("getBluetoothDevices") {
@@ -292,4 +423,3 @@ class ExpoDantsuEscposModule : Module() {
         }
     }
 }
-

@@ -1,5 +1,5 @@
 import {ReactNode, useEffect, useState} from 'react';
-import type {BluetoothDevice, UsbDevice, PrinterInfo} from 'expo-dantsu-escpos';
+import type {BluetoothDevice, UsbDevice, PrinterInfo, TcpDevice} from 'expo-dantsu-escpos';
 import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
 import {
     Button,
@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 export default function App() {
     const [btDevices, setBtDevices] = useState<BluetoothDevice[]>([]);
     const [usbDevices, setUsbDevices] = useState<UsbDevice[]>([]);
+    const [tcpDevices, setTcpDevices] = useState<TcpDevice[]>([]);
     const [connected, setConnected] = useState(false);
     const [text, setText] = useState('<C>Hello from Expo!</C>\n<BR>');
     const [barcode, setBarcode] = useState('123456789012');
@@ -109,7 +110,38 @@ export default function App() {
                     )}
                 </Group>
 
-                <Group name="TCP Printer">
+                <Group name="TCP Printers">
+                    <StyledButton
+                        title="List TCP Devices"
+                        icon="🔍"
+                        onPress={() => handleOperation(async () => {
+                            const list = await ExpoEscposDantsuModule.getTcpDevices();
+                            console.log("TCP Devices:", list);
+                            setTcpDevices(list);
+                        })}
+                        loading={loading}
+                    />
+                    {tcpDevices.map(device => (
+                        <StyledButton
+                            key={`${device.address}-${device.port}`}
+                            title={`Connect to ${device.address}:${device.port}`}
+                            icon="📶"
+                            onPress={() => handleOperation(async () => {
+                                try {
+                                    await ExpoEscposDantsuModule.connectTcp(device.address, device.port, 2000);
+                                    setConnected(true);
+                                } catch (error) {
+                                    console.error("TCP Connection Error:", error);
+                                }
+                            })}
+                            loading={loading}
+                        />
+                    ))}
+                    {tcpDevices.length === 0 && (
+                        <InfoText text="No TCP devices found. Tap 'List TCP Devices' to scan." />
+                    )}
+
+                    <SectionHeader title="Manual TCP Connection" />
                     <View style={styles.inputRow}>
                         <TextInput
                             style={[styles.input, styles.addressInput]}
@@ -128,7 +160,7 @@ export default function App() {
                         />
                     </View>
                     <StyledButton
-                        title="Connect to TCP Printer"
+                        title="Connect Manually"
                         icon="🖨️"
                         onPress={() => handleOperation(async () => {
                             if (!tcpAddress || !tcpPort) return;
