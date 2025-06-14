@@ -45,7 +45,7 @@ export default function App() {
                     {btDevices.map(device => (
                         <Button
                             key={device.address}
-                            title={`Connect ${device.name}`}
+                            title={`Connect ${device.deviceName}`}
                             onPress={async () => {
                                 await ExpoEscposDantsuModule.connectBluetooth(device.address);
                                 setConnected(true);
@@ -59,16 +59,21 @@ export default function App() {
                         title="List USB Devices"
                         onPress={async () => {
                             const list = await ExpoEscposDantsuModule.getUsbDevices();
+                            console.log("USB Devices:", list);
                             setUsbDevices(list);
                         }}
                     />
                     {usbDevices.map(device => (
                         <Button
                             key={`${device.vendorId}-${device.productId}`}
-                            title={`Connect ${device.name}`}
+                            title={`Connect ${device.deviceName}`}
                             onPress={async () => {
-                                await ExpoEscposDantsuModule.connectUsb(device.vendorId, device.productId);
-                                setConnected(true);
+                                try {
+                                    await ExpoEscposDantsuModule.connectUsb(device.vendorId, device.productId);
+                                    setConnected(true);
+                                } catch (error) {
+                                    console.error("USB Connection Error:", error);
+                                }
                             }}
                         />
                     ))}
