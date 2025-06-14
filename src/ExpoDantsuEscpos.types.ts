@@ -25,6 +25,7 @@ export interface TcpDevice {
   address: string;
   port: number;
   status: string;
+  deviceName: string;
 }
 
 export type PrinterInfo = {

@@ -222,7 +222,7 @@ class ExpoDantsuEscposModule : Module() {
             val list = connections.getList()
             list?.map {
                 mapOf(
-                    "name" to it.device.name,
+                    "deviceName" to it.device.name,
                     "address" to it.device.address
                 )
             } ?: emptyList<Map<String, String>>()
