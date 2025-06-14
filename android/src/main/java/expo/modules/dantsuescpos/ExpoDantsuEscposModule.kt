@@ -172,6 +172,7 @@ class ExpoDantsuEscposModule : Module() {
                         mapOf(
                             "address" to ip,
                             "port" to port,
+                            "deviceName" to "Printer at $ip:$port",
                             "status" to "available"
                         )
                     } catch (e: Exception) {
