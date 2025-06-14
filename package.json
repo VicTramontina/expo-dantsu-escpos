@@ -1,7 +1,7 @@
 {
   "name": "expo-dantsu-escpos",
   "version": "0.1.0",
-  "description": "My new module",
+  "description": "Expo bridge for DantSu's ESCPOS-ThermalPrinter-Android library",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -21,7 +21,10 @@
     "react-native",
     "expo",
     "expo-dantsu-escpos",
-    "ExpoDantsuEscpos"
+    "ExpoDantsuEscpos",
+    "escpos",
+    "thermal-printer",
+    "dantsu"
   ],
   "repository": "https://github.com/VicTramontina/expo-dantsu-escpos",
   "bugs": {
