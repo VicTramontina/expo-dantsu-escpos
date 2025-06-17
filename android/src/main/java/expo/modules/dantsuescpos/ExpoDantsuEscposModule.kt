@@ -322,10 +322,11 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         // Tear down
-        Function("disconnect") {
-            printer?.disconnectPrinter()
-            printer = null
-        }
+       Function("disconnect") {
+           printer?.disconnectPrinter()
+           printer = null
+           Unit
+       }
 
         // Print formatted ESC/POS text
         Function("printText") { text: String ->
