@@ -33,16 +33,9 @@
   "author": "victor <victor.tramontina@universo.univates.br> (https://github.com/VicTramontina)",
   "license": "MIT",
   "homepage": "https://github.com/VicTramontina/expo-dantsu-escpos#readme",
-  "dependencies": {
-    "expo": "~53.0.11",
-    "react": "19.0.0",
-    "react-native": "0.79.3"
-  },
   "devDependencies": {
     "@types/react": "~19.0.0",
-    "expo-module-scripts": "^4.1.6",
-    "expo": "~53.0.0",
-    "react-native": "0.79.1"
+    "expo-module-scripts": "^4.1.6"
   },
   "peerDependencies": {
     "expo": "*",
