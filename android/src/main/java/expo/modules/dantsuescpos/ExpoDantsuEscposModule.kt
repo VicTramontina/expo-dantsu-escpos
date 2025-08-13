@@ -49,10 +49,11 @@ class ExpoDantsuEscposModule : Module() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val bluetoothConnect = ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_CONNECT)
-            if (bluetoothConnect != PackageManager.PERMISSION_GRANTED) {
+            val bluetoothScan = ContextCompat.checkSelfPermission(activity, Manifest.permission.BLUETOOTH_SCAN)
+            if (bluetoothConnect != PackageManager.PERMISSION_GRANTED || bluetoothScan != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
                     activity,
-                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN),
                     BLUETOOTH_PERMISSION_REQUEST_CODE
                 )
                 return false
@@ -248,6 +249,7 @@ class ExpoDantsuEscposModule : Module() {
         AsyncFunction("connectBluetooth") { address: String?, printerDpi: Int?, printerWidthMM: Float?, printerNbrCharactersPerLine: Int? ->
             try {
                 if (!checkBluetoothPermissions()) {
+                    android.util.Log.e("ExpoDantsuEscposModule", "Bluetooth permissions not granted")
                     throw CodedException("E_BT_PERMISSION", RuntimeException("Bluetooth permissions not granted"))
                 }
 
@@ -268,6 +270,8 @@ class ExpoDantsuEscposModule : Module() {
                     printerNbrCharactersPerLine ?: 32
                 )
             } catch (e: Exception) {
+                //log to logcat
+                android.util.Log.e("ExpoDantsuEscposModule", "Bluetooth connect error: ${e.message}", e);
                 throw CodedException("E_BT_CONNECT", e)
             }
         }
