@@ -13,6 +13,8 @@ export type ChangeEventPayload = {
 export type BluetoothDevice = {
   deviceName: string;
   address: string;
+  type: 'paired' | 'nearby';
+  bondState?: number;
 };
 
 export type UsbDevice = {
@@ -36,17 +38,19 @@ export type PrinterInfo = {
 };
 
 export interface ExpoDantsuEscposModule {
+  /** Scan for all available Bluetooth devices (paired + nearby) */
   getBluetoothDevices(): Promise<BluetoothDevice[]>;
 
   getUsbDevices(): Promise<UsbDevice[]>;
 
   getTcpDevices(): Promise<TcpDevice[]>;
 
-  connectBluetooth(address?: string): Promise<void>;
+  /** Connect to Bluetooth printer by MAC address (direct insecure connection) */
+  connectBluetooth(address: string, printerDpi?: number, printerWidthMM?: number, printerNbrCharactersPerLine?: number): Promise<void>;
 
-  connectUsb(vendorId?: number, productId?: number): Promise<void>;
+  connectUsb(vendorId?: number, productId?: number, printerDpi?: number, printerWidthMM?: number, printerNbrCharactersPerLine?: number): Promise<void>;
 
-  connectTcp(address: string, port: number, timeout?: number): Promise<void>;
+  connectTcp(address: string, port: number, timeout?: number, printerDpi?: number, printerWidthMM?: number, printerNbrCharactersPerLine?: number): Promise<void>;
 
   disconnect(): Promise<void>;
 

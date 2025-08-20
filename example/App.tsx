@@ -53,7 +53,7 @@ export default function App() {
 
                 <Group name="Bluetooth Printers">
                     <StyledButton
-                        title="List Paired Devices"
+                        title="Scan All Devices"
                         icon="🔍"
                         onPress={() => handleOperation(async () => {
                             const list = await ExpoEscposDantsuModule.getBluetoothDevices();
@@ -62,20 +62,41 @@ export default function App() {
                         loading={loading}
                     />
                     {btDevices.map(device => (
-                        <StyledButton
-                            key={device.address}
-                            title={`Connect to ${device.deviceName}`}
-                            icon="📶"
-                            onPress={() => handleOperation(async () => {
-                                await ExpoEscposDantsuModule.connectBluetooth(device.address);
-                                setConnected(true);
-                            })}
-                            loading={loading}
-                        />
+                        <View key={device.address} style={styles.deviceContainer}>
+                            <View style={styles.deviceInfo}>
+                                <Text style={styles.deviceName}>
+                                    {device.deviceName} {device.type === 'paired' ? '📱' : '📡'}
+                                </Text>
+                                <Text style={styles.deviceAddress}>{device.address}</Text>
+                                <Text style={styles.deviceType}>
+                                    {device.type === 'paired' ? 'Paired Device' : 'Nearby Device'}
+                                </Text>
+                            </View>
+                            <StyledButton
+                                title="Connect"
+                                icon="📶"
+                                onPress={() => handleOperation(async () => {
+                                    try {
+                                        await ExpoEscposDantsuModule.connectBluetooth(device.address);
+                                        setConnected(true);
+                                    } catch (error: any) {
+                                        if (error.message?.includes('BUSY')) {
+                                            alert('Printer is already connected or busy!');
+                                        } else {
+                                            console.error('Connection error:', error);
+                                            alert('Failed to connect: ' + (error.message || 'Unknown error'));
+                                        }
+                                    }
+                                })}
+                                loading={loading}
+                                style={styles.connectButton}
+                            />
+                        </View>
                     ))}
                     {btDevices.length === 0 && (
-                        <InfoText text="No devices found. Tap 'List Paired Devices' to scan." />
+                        <InfoText text="No devices found. Tap 'Scan All Devices' to discover both paired and nearby Bluetooth devices." />
                     )}
+                    <InfoText text="All connections use direct insecure method - no pairing required." />
                 </Group>
 
                 <Group name="USB Printers">
@@ -570,5 +591,40 @@ const styles = StyleSheet.create({
     infoValue: {
         flex: 1,
         color: '#37474f',
+    },
+    deviceContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f9f9f9',
+        borderRadius: 8,
+        padding: 12,
+        marginVertical: 4,
+        borderLeftWidth: 3,
+        borderLeftColor: '#4C6EF5',
+    },
+    deviceInfo: {
+        flex: 1,
+        marginRight: 12,
+    },
+    deviceName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#37474f',
+        marginBottom: 2,
+    },
+    deviceAddress: {
+        fontSize: 14,
+        color: '#78909c',
+        fontFamily: 'monospace',
+        marginBottom: 2,
+    },
+    deviceType: {
+        fontSize: 12,
+        color: '#3f51b5',
+        fontWeight: '500',
+    },
+    connectButton: {
+        minWidth: 80,
+        paddingHorizontal: 16,
     },
 });

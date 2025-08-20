@@ -9,7 +9,7 @@ import type {
 } from "./ExpoDantsuEscpos.types";
 
 declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModuleEvents> {
-  /** List paired Bluetooth printers */
+  /** Scan for all available Bluetooth devices (paired + nearby) */
   getBluetoothDevices(): Promise<BluetoothDevice[]>;
 
   /** List connected USB printers */
@@ -18,14 +18,14 @@ declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModule
   /** List connected TCP printers */
   getTcpDevices(): Promise<TcpDevice[]>;
 
-  /** Connect to the first paired Bluetooth printer or by address */
-  connectBluetooth(address?: string): Promise<void>;
+  /** Connect to Bluetooth printer by MAC address (direct insecure connection) */
+  connectBluetooth(address: string, printerDpi?: number, printerWidthMM?: number, printerNbrCharactersPerLine?: number): Promise<void>;
 
   /** Connect to the first connected USB printer or by vendor/product id */
-  connectUsb(vendorId?: number, productId?: number): Promise<void>;
+  connectUsb(vendorId?: number, productId?: number, printerDpi?: number, printerWidthMM?: number, printerNbrCharactersPerLine?: number): Promise<void>;
 
   /** Connect to a TCP printer */
-  connectTcp(address: string, port: number, timeout?: number): Promise<void>;
+  connectTcp(address: string, port: number, timeout?: number, printerDpi?: number, printerWidthMM?: number, printerNbrCharactersPerLine?: number): Promise<void>;
 
   /** Disconnect from the printer */
   disconnect(): Promise<void>;

@@ -18,6 +18,11 @@ import expo.modules.kotlin.exception.CodedException
 import com.dantsu.escposprinter.EscPosPrinter
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothPrintersConnections
 import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection
+import com.dantsu.escposprinter.exceptions.EscPosConnectionException
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothSocket
+import java.util.UUID
 import com.dantsu.escposprinter.connection.tcp.TcpConnection
 import com.dantsu.escposprinter.connection.usb.UsbPrintersConnections
 import com.dantsu.escposprinter.connection.usb.UsbConnection
@@ -41,8 +46,11 @@ import kotlinx.coroutines.coroutineScope
 
 class ExpoDantsuEscposModule : Module() {
     private var printer: EscPosPrinter? = null
+    private var activeBluetoothSocket: BluetoothSocket? = null
+    private val connectedDevices = mutableSetOf<String>()
     private val BLUETOOTH_PERMISSION_REQUEST_CODE = 1
     private val ACTION_USB_PERMISSION = "com.github.expo.modules.dantsuescpos.USB_PERMISSION"
+    private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     private fun checkBluetoothPermissions(): Boolean {
         val activity = appContext.activityProvider?.currentActivity ?: return false
@@ -148,6 +156,67 @@ class ExpoDantsuEscposModule : Module() {
         }
     }
 
+    @SuppressLint("MissingPermission")
+    private fun createDirectBluetoothConnection(device: BluetoothDevice): BluetoothConnection {
+        return object : BluetoothConnection(device) {
+            private var bluetoothSocket: BluetoothSocket? = null
+            private var isConnectedFlag = false
+            
+            override fun connect(): BluetoothConnection {
+                if (isConnectedFlag) {
+                    // Already connected, just return this
+                    return this
+                }
+                
+                try {
+                    // Cancel discovery to improve connection performance
+                    val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                    if (bluetoothAdapter?.isDiscovering == true) {
+                        bluetoothAdapter.cancelDiscovery()
+                    }
+                    
+                    // Create insecure RFCOMM socket
+                    bluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
+                    
+                    // Connect to the device
+                    bluetoothSocket?.connect()
+                    
+                    // Store the active socket for cleanup
+                    activeBluetoothSocket = bluetoothSocket
+                    isConnectedFlag = true
+                    
+                    android.util.Log.d("ExpoDantsuEscposModule", "Successfully connected to ${device.address}")
+                    
+                    return this
+                } catch (e: Exception) {
+                    android.util.Log.e("ExpoDantsuEscposModule", "Direct connection failed to ${device.address}: ${e.message}")
+                    throw EscPosConnectionException("Unable to connect to bluetooth device: ${e.message}")
+                }
+            }
+            
+            override fun disconnect(): BluetoothConnection {
+                try {
+                    bluetoothSocket?.close()
+                    bluetoothSocket = null
+                    activeBluetoothSocket = null
+                    isConnectedFlag = false
+                } catch (e: Exception) {
+                    android.util.Log.w("ExpoDantsuEscposModule", "Disconnect warning: ${e.message}")
+                }
+                return this
+            }
+            
+            override fun isConnected(): Boolean {
+                return isConnectedFlag && bluetoothSocket?.isConnected == true
+            }
+            
+            override fun write(bytes: ByteArray?) {
+                bluetoothSocket?.outputStream?.write(bytes)
+                bluetoothSocket?.outputStream?.flush()
+            }
+        }
+    }
+
     private suspend fun scanForPrinters(): List<Map<String, Any>> = coroutineScope {
         val localIp = getLocalIpAddress() ?: return@coroutineScope emptyList()
         val subnetPrefix = getSubnetPrefix(localIp) ?: return@coroutineScope emptyList()
@@ -214,20 +283,77 @@ class ExpoDantsuEscposModule : Module() {
             }
         }
 
-        // List paired Bluetooth printers
+        // Scan for all Bluetooth devices (paired + nearby)
         AsyncFunction("getBluetoothDevices") {
             if (!checkBluetoothPermissions()) {
                 throw CodedException("E_BT_PERMISSION", RuntimeException("Bluetooth permissions not granted"))
             }
 
-            val connections = BluetoothPrintersConnections()
-            val list = connections.getList()
-            list?.map {
-                mapOf(
-                    "deviceName" to it.device.name,
-                    "address" to it.device.address
-                )
-            } ?: emptyList<Map<String, String>>()
+            val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                ?: throw CodedException("E_NO_BT_ADAPTER", RuntimeException("Bluetooth adapter not available"))
+
+            if (!bluetoothAdapter.isEnabled) {
+                throw CodedException("E_BT_DISABLED", RuntimeException("Bluetooth is disabled"))
+            }
+
+            val devices = mutableListOf<Map<String, Any>>()
+            val discoveredDevices = mutableSetOf<String>()
+
+            // First add paired devices
+            val pairedDevices = bluetoothAdapter.bondedDevices
+            pairedDevices?.forEach { device ->
+                devices.add(mapOf(
+                    "deviceName" to (device.name ?: "Unknown Device"),
+                    "address" to device.address,
+                    "type" to "paired",
+                    "bondState" to device.bondState
+                ))
+                discoveredDevices.add(device.address)
+            }
+
+            // Start discovery for nearby devices
+            try {
+                if (bluetoothAdapter.isDiscovering) {
+                    bluetoothAdapter.cancelDiscovery()
+                }
+                
+                // Register broadcast receiver for device discovery
+                val discoveryReceiver = object : android.content.BroadcastReceiver() {
+                    override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                        when (intent?.action) {
+                            BluetoothDevice.ACTION_FOUND -> {
+                                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                                device?.let {
+                                    if (!discoveredDevices.contains(it.address)) {
+                                        devices.add(mapOf(
+                                            "deviceName" to (it.name ?: "Unknown Device"),
+                                            "address" to it.address,
+                                            "type" to "nearby",
+                                            "bondState" to it.bondState
+                                        ))
+                                        discoveredDevices.add(it.address)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                val activity = appContext.activityProvider?.currentActivity
+                activity?.registerReceiver(discoveryReceiver, android.content.IntentFilter(BluetoothDevice.ACTION_FOUND))
+                
+                bluetoothAdapter.startDiscovery()
+                
+                // Wait for discovery to complete
+                Thread.sleep(10000)
+                
+                bluetoothAdapter.cancelDiscovery()
+                activity?.unregisterReceiver(discoveryReceiver)
+            } catch (e: Exception) {
+                android.util.Log.w("ExpoDantsuEscposModule", "Discovery failed: ${e.message}")
+            }
+
+            devices
         }
 
         // List connected USB printers
@@ -245,7 +371,7 @@ class ExpoDantsuEscposModule : Module() {
             } ?: emptyList<Map<String, Any>>()
         }
 
-        // Connect via Bluetooth (address optional)
+        // Connect via Bluetooth with direct connection capability
         AsyncFunction("connectBluetooth") { address: String?, printerDpi: Int?, printerWidthMM: Float?, printerNbrCharactersPerLine: Int? ->
             try {
                 if (!checkBluetoothPermissions()) {
@@ -253,15 +379,38 @@ class ExpoDantsuEscposModule : Module() {
                     throw CodedException("E_BT_PERMISSION", RuntimeException("Bluetooth permissions not granted"))
                 }
 
-                val connDevice: BluetoothConnection = if (address.isNullOrEmpty()) {
-                    BluetoothPrintersConnections.selectFirstPaired()
-                        ?: throw CodedException("E_NO_BT_PRINTER", RuntimeException("No paired Bluetooth printer"))
-                } else {
-                    val connections = BluetoothPrintersConnections()
-                    connections.getList()
-                        ?.firstOrNull { it.device.address == address }
-                        ?: throw CodedException("E_NO_BT_PRINTER", RuntimeException("Printer '$address' not found"))
+                // Check if device is already connected
+                address?.let { addr ->
+                    if (connectedDevices.contains(addr)) {
+                        throw CodedException("E_PRINTER_BUSY", RuntimeException("Printer at address $addr is already connected"))
+                    }
                 }
+
+                val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                    ?: throw CodedException("E_NO_BT_ADAPTER", RuntimeException("Bluetooth adapter not available"))
+
+                if (!bluetoothAdapter.isEnabled) {
+                    throw CodedException("E_BT_DISABLED", RuntimeException("Bluetooth is disabled"))
+                }
+
+                // Always use direct insecure connection
+                val connDevice: BluetoothConnection = if (address.isNullOrEmpty()) {
+                    throw CodedException("E_NO_ADDRESS", RuntimeException("MAC address is required for connection"))
+                } else {
+                    // Connect directly by MAC address using insecure connection
+                    val targetDevice = try {
+                        bluetoothAdapter.getRemoteDevice(address)
+                    } catch (e: IllegalArgumentException) {
+                        throw CodedException("E_INVALID_ADDRESS", RuntimeException("Invalid MAC address: $address"))
+                    }
+
+                    // Always create direct insecure connection
+                    val directConnection = createDirectBluetoothConnection(targetDevice)
+                    directConnection
+                }
+
+                // Mark device as connected
+                address?.let { connectedDevices.add(it) }
 
                 printer = EscPosPrinter(
                     connDevice,
@@ -270,8 +419,7 @@ class ExpoDantsuEscposModule : Module() {
                     printerNbrCharactersPerLine ?: 32
                 )
             } catch (e: Exception) {
-                //log to logcat
-                android.util.Log.e("ExpoDantsuEscposModule", "Bluetooth connect error: ${e.message}", e);
+                android.util.Log.e("ExpoDantsuEscposModule", "Bluetooth connect error: ${e.message}", e)
                 throw CodedException("E_BT_CONNECT", e)
             }
         }
@@ -326,11 +474,18 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         // Tear down
-       Function("disconnect") {
-           printer?.disconnectPrinter()
-           printer = null
-           Unit
-       }
+        Function("disconnect") {
+            try {
+                printer?.disconnectPrinter()
+                activeBluetoothSocket?.close()
+                activeBluetoothSocket = null
+                connectedDevices.clear()
+                printer = null
+            } catch (e: Exception) {
+                android.util.Log.w("ExpoDantsuEscposModule", "Disconnect warning: ${e.message}")
+            }
+            Unit
+        }
 
         // Print formatted ESC/POS text
         Function("printText") { text: String ->
