@@ -2,6 +2,8 @@
 
 A React Native module that bridges [DantSu's](https://github.com/DantSu) [ESCPOS-ThermalPrinter-Android](https://github.com/DantSu/ESCPOS-ThermalPrinter-Android) library so you can send ESC/POS commands to thermal printers from an Expo application. The current implementation targets **Android** only and wraps DantSu's native API with asynchronous functions.
 
+**✨ Enhanced Bluetooth Support**: This version includes advanced Bluetooth connectivity features including insecure SPP connections for corporate ROMs, device discovery scanning, and comprehensive device listing with bond state and signal strength information.
+
 ## Expo Dantsu ESCPOS Module
 
 This module bridges the [ESCPOS-ThermalPrinter-Android](https://github.com/DantSu/ESCPOS-ThermalPrinter-Android) library to React Native using Expo. It provides methods to interact with Bluetooth, USB, and TCP printers.
@@ -15,9 +17,31 @@ expo prebuild
 
 ### Methods
 
-#### `getBluetoothDevices()`
-Lists paired Bluetooth printers.
-- **Returns**: `Promise<BluetoothDevice[]>`
+#### `getBluetoothDevices(options?: BluetoothScanOptions)`
+**Enhanced**: Lists both bonded (paired) and discovered Bluetooth devices with comprehensive scanning capabilities.
+
+- **Parameters**:
+  - `options` (optional): Scan configuration object
+    - `scanMillis` (number, default: 5000): Duration of device discovery in milliseconds
+    - `nameRegex` (string): Filter devices by name using regex pattern
+    - `includeRssi` (boolean, default: true): Include signal strength (RSSI) information
+    - `includeBondedOnly` (boolean, default: false): If true, only return bonded devices (skip discovery)
+- **Returns**: `Promise<BluetoothDevice[]>` - Array of devices with enhanced metadata
+
+**Example**:
+```typescript
+// Get all devices with 6-second discovery
+const devices = await ExpoEscposDantsuModule.getBluetoothDevices({
+  scanMillis: 6000,
+  includeRssi: true,
+  nameRegex: 'printer.*' // Only devices with names containing "printer"
+});
+
+// Get only bonded devices (fast)
+const bondedDevices = await ExpoEscposDantsuModule.getBluetoothDevices({
+  includeBondedOnly: true
+});
+```
 
 #### `getUsbDevices()`
 Lists connected USB printers.
@@ -27,11 +51,35 @@ Lists connected USB printers.
 Lists connected TCP printers.
 - **Returns**: `Promise<TcpDevice[]>`
 
-#### `connectBluetooth(address?: string)`
-Connects to a Bluetooth printer by address or the first paired printer.
+#### `connectBluetooth(options: BluetoothConnectionOptions)`
+**Enhanced**: Connects to a Bluetooth printer with advanced connection strategies including insecure SPP support for corporate ROMs.
+
 - **Parameters**:
-  - `address` (optional): The address of the Bluetooth printer.
-- **Returns**: `Promise<void>`
+  - `options`: Connection configuration object
+    - `address` (string, **required**): MAC address of the target Bluetooth device
+    - `preferInsecureIfUnbonded` (boolean, default: true): Use insecure RFCOMM for unbonded devices
+    - `allowSecureFallback` (boolean, default: true): Allow fallback to secure connection if insecure fails
+    - `timeoutMs` (number, default: 15000): Connection timeout in milliseconds
+    - `nameHint` (string): Device name for logging purposes
+    - `printerDpi` (number, default: 203): Printer DPI setting
+    - `printerWidthMM` (number, default: 48): Printer width in millimeters
+    - `printerNbrCharactersPerLine` (number, default: 32): Characters per line
+- **Returns**: `Promise<BluetoothConnectionResult>` - Connection result with mode and printer info
+
+**Example**:
+```typescript
+// Connect to a specific device with insecure SPP (ideal for corporate ROMs)
+const result = await ExpoEscposDantsuModule.connectBluetooth({
+  address: "00:11:22:33:44:55",
+  preferInsecureIfUnbonded: true,
+  allowSecureFallback: true,
+  timeoutMs: 15000,
+  nameHint: "My Thermal Printer"
+});
+
+console.log(`Connected using ${result.connectionMode} mode`);
+// result.connectionMode can be: "secure", "insecure", or "existing"
+```
 
 #### `connectUsb(vendorId?: number, productId?: number)`
 Connects to a USB printer by vendor/product ID or the first connected printer.
@@ -86,9 +134,34 @@ Prints a QR code.
 
 ### Type Definitions
 
-#### `BluetoothDevice`
-- `deviceName`: Name of the Bluetooth device.
-- `address`: Address of the Bluetooth device.
+#### `BluetoothDevice` (Enhanced)
+- `deviceName`: Name of the Bluetooth device (can be null for unnamed devices).
+- `address`: MAC address of the Bluetooth device.
+- `bonded`: Whether the device is bonded (paired) with this Android device.
+- `rssi`: Signal strength in dBm (null if not available during scan).
+- `source`: How the device was discovered - `"bonded"`, `"scan"`, or `"both"`.
+
+#### `BluetoothScanOptions`
+- `scanMillis?`: Duration of device discovery in milliseconds (default: 5000).
+- `nameRegex?`: Filter devices by name using regex pattern.
+- `includeRssi?`: Include signal strength information (default: true).
+- `includeBondedOnly?`: If true, only return bonded devices (default: false).
+
+#### `BluetoothConnectionOptions`
+- `address`: MAC address of the target Bluetooth device (**required**).
+- `preferInsecureIfUnbonded?`: Use insecure RFCOMM for unbonded devices (default: true).
+- `allowSecureFallback?`: Allow fallback to secure connection (default: true).
+- `timeoutMs?`: Connection timeout in milliseconds (default: 15000).
+- `nameHint?`: Device name for logging purposes.
+- `printerDpi?`: Printer DPI setting (default: 203).
+- `printerWidthMM?`: Printer width in millimeters (default: 48).
+- `printerNbrCharactersPerLine?`: Characters per line (default: 32).
+
+#### `BluetoothConnectionResult`
+- `connectionMode`: The connection mode used - `"secure"`, `"insecure"`, or `"existing"`.
+- `dpi`: Printer DPI setting.
+- `widthMM`: Printer width in millimeters.
+- `charsPerLine`: Characters per line.
 
 #### `UsbDevice`
 - `deviceName`: Name of the USB device.
@@ -109,20 +182,39 @@ Prints a QR code.
 
 ### Permissions
 
-#### Bluetooth
-Add the following permissions to your `app.json`:
+#### Bluetooth (Enhanced)
+The enhanced Bluetooth functionality requires different permissions based on Android version:
+
+**For Android 12+ (API 31+):**
+```json
+{
+  "expo": {
+    "android": {
+      "permissions": [
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT"
+      ]
+    }
+  }
+}
+```
+
+**For Android < 12:**
 ```json
 {
   "expo": {
     "android": {
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "BLUETOOTH"
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN"
       ]
     }
   }
 }
 ```
+
+**Note**: Location permission (`ACCESS_FINE_LOCATION`) is required on older Android versions for Bluetooth device discovery.
 
 #### USB
 Add the following permissions to your `app.json`:
@@ -143,17 +235,116 @@ Ensure network access is enabled in your app.
 
 ### Example Usage
 
-Refer to the `example` directory for a working example. Below is a snippet:
+Refer to the `example` directory for a comprehensive working example. Below are snippets demonstrating the enhanced Bluetooth functionality:
 
+#### Enhanced Bluetooth Workflow
 ```tsx
 import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
 
-async function printExample() {
-  await ExpoEscposDantsuModule.connectBluetooth();
-  await ExpoEscposDantsuModule.printText('<C>Hello World</C>\n<BR>');
-  await ExpoEscposDantsuModule.disconnect();
+async function enhancedBluetoothPrint() {
+  try {
+    // 1. Discover all available devices
+    const devices = await ExpoEscposDantsuModule.getBluetoothDevices({
+      scanMillis: 6000,
+      includeRssi: true,
+      nameRegex: 'printer' // Optional: filter for printers
+    });
+    
+    console.log(`Found ${devices.length} devices`);
+    devices.forEach(device => {
+      console.log(`${device.deviceName} (${device.address}) - ${device.bonded ? 'Bonded' : 'Discovered'} - ${device.rssi}dBm`);
+    });
+    
+    // 2. Select and connect to a device
+    const targetDevice = devices[0]; // Select the first device
+    const connectionResult = await ExpoEscposDantsuModule.connectBluetooth({
+      address: targetDevice.address,
+      nameHint: targetDevice.deviceName,
+      preferInsecureIfUnbonded: true, // Key for corporate ROMs
+      allowSecureFallback: true,
+      timeoutMs: 15000
+    });
+    
+    console.log(`Connected using ${connectionResult.connectionMode} mode`);
+    
+    // 3. Print content
+    await ExpoEscposDantsuModule.printText('<C>Enhanced Bluetooth Print</C>\n<BR>');
+    await ExpoEscposDantsuModule.printQRCode('https://example.com', 20, 'C');
+    
+    // 4. Disconnect
+    await ExpoEscposDantsuModule.disconnect();
+    
+  } catch (error) {
+    console.error('Printing failed:', error);
+  }
 }
 ```
+
+#### Legacy Bluetooth (Backward Compatible)
+```tsx
+import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
+
+async function legacyBluetoothPrint() {
+  // Note: Legacy method still works but requires bonded devices
+  const devices = await ExpoEscposDantsuModule.getBluetoothDevices({ includeBondedOnly: true });
+  
+  if (devices.length > 0) {
+    await ExpoEscposDantsuModule.connectBluetooth({ address: devices[0].address });
+    await ExpoEscposDantsuModule.printText('<C>Hello World</C>\n<BR>');
+    await ExpoEscposDantsuModule.disconnect();
+  }
+}
+```
+
+### Debugging and Logging
+
+The enhanced Bluetooth functionality includes comprehensive logging to help debug connection issues, especially useful for corporate ROMs:
+
+#### Android Logcat Logs
+
+Use `adb logcat` or Android Studio's Logcat to monitor detailed connection logs:
+
+```bash
+# Filter for module-specific logs
+adb logcat | grep "ExpoDantsuEscposModule"
+
+# Common log patterns:
+# BT/SCAN: Device discovery progress
+# BT/CONNECT: Connection attempts and results  
+# BT/DISCONNECT: Disconnection status
+```
+
+**Key Log Messages:**
+- `Strategy: insecure-first` or `secure-first` - Shows connection approach
+- `Insecure connection successful` - Insecure SPP worked
+- `Secure connection successful` - Standard Bluetooth connection worked
+- `E_BT_SCAN_WARN: Discovery failed` - Discovery issues (permissions/hardware)
+
+#### Common Issues & Solutions
+
+**Corporate ROM Connection Issues:**
+- Set `preferInsecureIfUnbonded: true` (default)
+- Ensure device is not bonded if using insecure connection
+- Check that Bluetooth permissions are properly granted
+
+**Discovery Not Finding Devices:**
+- Verify location permissions on Android < 12
+- Ensure Bluetooth is enabled and discoverable on target device
+- Try increasing `scanMillis` parameter
+
+**Connection Timeouts:**
+- Increase `timeoutMs` parameter
+- Ensure target device is within range
+- Check for interference from other Bluetooth devices
+
+### Corporate ROM Compatibility
+
+This module specifically addresses connection issues common in corporate Android ROMs:
+
+- **Insecure SPP Support**: Bypasses pairing requirements often restricted in corporate environments
+- **Dual Strategy**: Falls back to secure connections when appropriate
+- **Enhanced Discovery**: Finds devices without requiring prior pairing
+- **Comprehensive Logging**: Detailed connection diagnostics for troubleshooting
 
 ### Acknowledgements
 

@@ -11,8 +11,11 @@ export type ChangeEventPayload = {
 };
 
 export type BluetoothDevice = {
-  deviceName: string;
+  deviceName: string | null;
   address: string;
+  bonded: boolean;
+  rssi: number | null;
+  source: 'bonded' | 'scan' | 'both';
 };
 
 export type UsbDevice = {
@@ -35,14 +38,39 @@ export type PrinterInfo = {
   charsPerLine: number;
 };
 
+export type BluetoothScanOptions = {
+  scanMillis?: number;
+  nameRegex?: string;
+  includeRssi?: boolean;
+  includeBondedOnly?: boolean;
+};
+
+export type BluetoothConnectionOptions = {
+  address: string;
+  preferInsecureIfUnbonded?: boolean;
+  timeoutMs?: number;
+  allowSecureFallback?: boolean;
+  nameHint?: string;
+  printerDpi?: number;
+  printerWidthMM?: number;
+  printerNbrCharactersPerLine?: number;
+};
+
+export type BluetoothConnectionResult = {
+  connectionMode: 'secure' | 'insecure' | 'existing';
+  dpi: number;
+  widthMM: number;
+  charsPerLine: number;
+};
+
 export interface ExpoDantsuEscposModule {
-  getBluetoothDevices(): Promise<BluetoothDevice[]>;
+  getBluetoothDevices(options?: BluetoothScanOptions): Promise<BluetoothDevice[]>;
 
   getUsbDevices(): Promise<UsbDevice[]>;
 
   getTcpDevices(): Promise<TcpDevice[]>;
 
-  connectBluetooth(address?: string): Promise<void>;
+  connectBluetooth(options: BluetoothConnectionOptions): Promise<BluetoothConnectionResult>;
 
   connectUsb(vendorId?: number, productId?: number): Promise<void>;
 

@@ -1,7 +1,7 @@
 {
   "name": "expo-dantsu-escpos",
-  "version": "0.1.3",
-  "description": "Expo bridge for DantSu's ESCPOS-ThermalPrinter-Android library",
+  "version": "0.2.1",
+  "description": "Expo bridge for DantSu's ESCPOS-ThermalPrinter-Android library with enhanced Bluetooth support for corporate ROMs, insecure SPP connections, and comprehensive device discovery",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -24,9 +24,21 @@
     "ExpoDantsuEscpos",
     "escpos",
     "thermal-printer",
-    "dantsu"
+    "dantsu",
+    "bluetooth",
+    "bluetooth-spp",
+    "insecure-rfcomm",
+    "corporate-rom",
+    "device-discovery",
+    "bluetooth-scanning",
+    "printer-bluetooth",
+    "android-bluetooth",
+    "expo-module"
   ],
-  "repository": "https://github.com/VicTramontina/expo-dantsu-escpos",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VicTramontina/expo-dantsu-escpos.git"
+  },
   "bugs": {
     "url": "https://github.com/VicTramontina/expo-dantsu-escpos/issues"
   },

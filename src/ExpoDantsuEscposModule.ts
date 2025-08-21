@@ -6,11 +6,14 @@ import type {
   UsbDevice,
   PrinterInfo,
   TcpDevice,
+  BluetoothScanOptions,
+  BluetoothConnectionOptions,
+  BluetoothConnectionResult,
 } from "./ExpoDantsuEscpos.types";
 
 declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModuleEvents> {
-  /** List paired Bluetooth printers */
-  getBluetoothDevices(): Promise<BluetoothDevice[]>;
+  /** List Bluetooth devices (bonded + discovered) with enhanced scanning */
+  getBluetoothDevices(options?: BluetoothScanOptions): Promise<BluetoothDevice[]>;
 
   /** List connected USB printers */
   getUsbDevices(): Promise<UsbDevice[]>;
@@ -18,8 +21,8 @@ declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModule
   /** List connected TCP printers */
   getTcpDevices(): Promise<TcpDevice[]>;
 
-  /** Connect to the first paired Bluetooth printer or by address */
-  connectBluetooth(address?: string): Promise<void>;
+  /** Enhanced Bluetooth connection with insecure SPP support */
+  connectBluetooth(options: BluetoothConnectionOptions): Promise<BluetoothConnectionResult>;
 
   /** Connect to the first connected USB printer or by vendor/product id */
   connectUsb(vendorId?: number, productId?: number): Promise<void>;

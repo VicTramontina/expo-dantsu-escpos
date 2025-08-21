@@ -1,5 +1,5 @@
 import {ReactNode, useEffect, useState} from 'react';
-import type {BluetoothDevice, UsbDevice, PrinterInfo, TcpDevice} from 'expo-dantsu-escpos';
+import type {BluetoothDevice, UsbDevice, PrinterInfo, TcpDevice, BluetoothConnectionResult} from 'expo-dantsu-escpos';
 import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
 import {
     Button,
@@ -19,6 +19,9 @@ export default function App() {
     const [usbDevices, setUsbDevices] = useState<UsbDevice[]>([]);
     const [tcpDevices, setTcpDevices] = useState<TcpDevice[]>([]);
     const [connected, setConnected] = useState(false);
+    const [connectionInfo, setConnectionInfo] = useState<BluetoothConnectionResult | null>(null);
+    const [selectedDevice, setSelectedDevice] = useState<BluetoothDevice | null>(null);
+    const [nameFilter, setNameFilter] = useState('');
     const [text, setText] = useState('<C>Hello from Expo!</C>\n<BR>');
     const [barcode, setBarcode] = useState('123456789012');
     const [qr, setQr] = useState('https://expo.dev');
@@ -51,30 +54,133 @@ export default function App() {
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
                 <Text style={styles.header}>Thermal Printer Test</Text>
 
-                <Group name="Bluetooth Printers">
-                    <StyledButton
-                        title="List Paired Devices"
-                        icon="🔍"
-                        onPress={() => handleOperation(async () => {
-                            const list = await ExpoEscposDantsuModule.getBluetoothDevices();
-                            setBtDevices(list);
-                        })}
-                        loading={loading}
-                    />
-                    {btDevices.map(device => (
+                <Group name="Enhanced Bluetooth Printers">
+                    <SectionHeader title="Device Discovery" />
+                    <View style={styles.actionRow}>
                         <StyledButton
-                            key={device.address}
-                            title={`Connect to ${device.deviceName}`}
-                            icon="📶"
+                            title="Scan Bonded Only"
+                            icon="📱"
                             onPress={() => handleOperation(async () => {
-                                await ExpoEscposDantsuModule.connectBluetooth(device.address);
-                                setConnected(true);
+                                const list = await ExpoEscposDantsuModule.getBluetoothDevices({ 
+                                    includeBondedOnly: true 
+                                });
+                                setBtDevices(list);
                             })}
                             loading={loading}
+                            style={styles.actionButton}
                         />
+                        <StyledButton
+                            title="Full Discovery"
+                            icon="🔍"
+                            onPress={() => handleOperation(async () => {
+                                const list = await ExpoEscposDantsuModule.getBluetoothDevices({ 
+                                    scanMillis: 6000,
+                                    includeRssi: true,
+                                    nameRegex: nameFilter || undefined
+                                });
+                                setBtDevices(list);
+                            })}
+                            loading={loading}
+                            style={styles.actionButton}
+                        />
+                    </View>
+                    
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Filter by name (optional, regex supported)"
+                        value={nameFilter}
+                        onChangeText={setNameFilter}
+                        placeholderTextColor="#a0a0a0"
+                    />
+
+                    <SectionHeader title="Available Devices" />
+                    {btDevices.map(device => (
+                        <TouchableOpacity
+                            key={device.address}
+                            style={[
+                                styles.deviceCard,
+                                selectedDevice?.address === device.address && styles.deviceCardSelected
+                            ]}
+                            onPress={() => setSelectedDevice(device)}
+                        >
+                            <View style={styles.deviceInfo}>
+                                <Text style={styles.deviceName}>
+                                    {device.deviceName || 'Unknown Device'}
+                                </Text>
+                                <Text style={styles.deviceAddress}>{device.address}</Text>
+                                <View style={styles.deviceMeta}>
+                                    <Text style={[styles.deviceTag, device.bonded ? styles.bondedTag : styles.unbondedTag]}>
+                                        {device.bonded ? '📱 Bonded' : '📡 Discovered'}
+                                    </Text>
+                                    {device.rssi && (
+                                        <Text style={styles.deviceTag}>
+                                            📶 {device.rssi}dBm
+                                        </Text>
+                                    )}
+                                    <Text style={styles.deviceTag}>
+                                        📍 {device.source}
+                                    </Text>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
                     ))}
+                    
+                    {selectedDevice && (
+                        <View>
+                            <SectionHeader title="Connect to Selected Device" />
+                            <View style={styles.selectedDeviceCard}>
+                                <Text style={styles.selectedDeviceText}>
+                                    Selected: {selectedDevice.deviceName || 'Unknown'} ({selectedDevice.address})
+                                </Text>
+                            </View>
+                            <StyledButton
+                                title={`Connect with Insecure SPP ${selectedDevice.bonded ? '(Fallback)' : '(Primary)'}`}
+                                icon="🔗"
+                                onPress={() => handleOperation(async () => {
+                                    const result = await ExpoEscposDantsuModule.connectBluetooth({
+                                        address: selectedDevice.address,
+                                        nameHint: selectedDevice.deviceName || undefined,
+                                        preferInsecureIfUnbonded: true,
+                                        allowSecureFallback: true,
+                                        timeoutMs: 15000
+                                    });
+                                    setConnectionInfo(result);
+                                    setConnected(true);
+                                    console.log('Connected with mode:', result.connectionMode);
+                                })}
+                                loading={loading}
+                            />
+                        </View>
+                    )}
+                    
+                    {connectionInfo && (
+                        <View style={styles.connectionCard}>
+                            <Text style={styles.connectionTitle}>Connection Status</Text>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Mode:</Text>
+                                <Text style={[
+                                    styles.infoValue, 
+                                    connectionInfo.connectionMode === 'insecure' 
+                                        ? styles.insecureMode 
+                                        : styles.secureMode
+                                ]}>
+                                    {connectionInfo.connectionMode.toUpperCase()}
+                                    {connectionInfo.connectionMode === 'insecure' ? ' 🔓' : ' 🔒'}
+                                </Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>DPI:</Text>
+                                <Text style={styles.infoValue}>{connectionInfo.dpi}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>Width:</Text>
+                                <Text style={styles.infoValue}>{connectionInfo.widthMM}mm</Text>
+                            </View>
+                        </View>
+                    )}
+
                     {btDevices.length === 0 && (
-                        <InfoText text="No devices found. Tap 'List Paired Devices' to scan." />
+                        <InfoText text="No devices found. Tap scan buttons to discover devices." />
                     )}
                 </Group>
 
@@ -324,6 +430,8 @@ export default function App() {
                                 onPress={() => handleOperation(async () => {
                                     await ExpoEscposDantsuModule.disconnect();
                                     setConnected(false);
+                                    setConnectionInfo(null);
+                                    setSelectedDevice(null);
                                 })}
                                 loading={loading}
                                 style={styles.disconnectButton}
@@ -570,5 +678,96 @@ const styles = StyleSheet.create({
     infoValue: {
         flex: 1,
         color: '#37474f',
+    },
+    deviceCard: {
+        backgroundColor: '#f8f9ff',
+        borderWidth: 1,
+        borderColor: '#e0e6ff',
+        borderRadius: 12,
+        padding: 16,
+        marginVertical: 6,
+        elevation: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+    },
+    deviceCardSelected: {
+        backgroundColor: '#e8f0ff',
+        borderColor: '#4C6EF5',
+        borderWidth: 2,
+    },
+    deviceInfo: {
+        flex: 1,
+    },
+    deviceName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#2d3748',
+        marginBottom: 4,
+    },
+    deviceAddress: {
+        fontSize: 14,
+        color: '#718096',
+        marginBottom: 8,
+        fontFamily: 'monospace',
+    },
+    deviceMeta: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    deviceTag: {
+        fontSize: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: '#f7fafc',
+        color: '#4a5568',
+        overflow: 'hidden',
+    },
+    bondedTag: {
+        backgroundColor: '#c6f6d5',
+        color: '#22543d',
+    },
+    unbondedTag: {
+        backgroundColor: '#fed7d7',
+        color: '#742a2a',
+    },
+    selectedDeviceCard: {
+        backgroundColor: '#bee3f8',
+        borderWidth: 1,
+        borderColor: '#4299e1',
+        borderRadius: 8,
+        padding: 12,
+        marginVertical: 8,
+    },
+    selectedDeviceText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#2b6cb0',
+    },
+    connectionCard: {
+        backgroundColor: '#f0fff4',
+        borderWidth: 2,
+        borderColor: '#68d391',
+        borderRadius: 12,
+        padding: 16,
+        marginVertical: 8,
+    },
+    connectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#22543d',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    insecureMode: {
+        color: '#e53e3e',
+        fontWeight: '700',
+    },
+    secureMode: {
+        color: '#38a169',
+        fontWeight: '700',
     },
 });
