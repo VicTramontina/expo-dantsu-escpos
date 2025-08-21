@@ -10,6 +10,31 @@ export type ChangeEventPayload = {
   value: string;
 };
 
+export type EscPosTextBuilder = {
+  text(content: string): EscPosTextBuilder;
+  center(content: string): EscPosTextBuilder;
+  left(content: string): EscPosTextBuilder;
+  right(content: string): EscPosTextBuilder;
+  bold(content: string): EscPosTextBuilder;
+  underline(content: string): EscPosTextBuilder;
+  fontBig(content: string): EscPosTextBuilder;
+  fontTall(content: string): EscPosTextBuilder;
+  image(base64: string, align?: 'L' | 'C' | 'R', gradient?: boolean): EscPosTextBuilder;
+  barcode(data: string, options?: {
+    type?: string;
+    width?: number;
+    height?: number;
+    textPosition?: string;
+    align?: 'L' | 'C' | 'R';
+  }): EscPosTextBuilder;
+  qrcode(data: string, options?: {
+    size?: number;
+    align?: 'L' | 'C' | 'R';
+  }): EscPosTextBuilder;
+  newLine(): EscPosTextBuilder;
+  build(): string;
+};
+
 export type BluetoothDevice = {
   deviceName: string | null;
   address: string;
@@ -56,11 +81,23 @@ export type BluetoothConnectionOptions = {
   printerNbrCharactersPerLine?: number;
 };
 
+export type PrintOptions = {
+  feedPaperMM?: number;
+  cutPaper?: boolean;
+  openCashDrawer?: boolean;
+};
+
 export type BluetoothConnectionResult = {
   connectionMode: 'secure' | 'insecure' | 'existing';
   dpi: number;
   widthMM: number;
   charsPerLine: number;
+};
+
+export type PrintFormattedTextOptions = {
+  feedPaperMM?: number;
+  cutPaper?: boolean;
+  openCashDrawer?: boolean;
 };
 
 export interface ExpoDantsuEscposModule {
@@ -78,26 +115,14 @@ export interface ExpoDantsuEscposModule {
 
   disconnect(): Promise<void>;
 
-  printText(text: string): Promise<void>;
-
-  printImage(base64: string, gradient?: boolean): Promise<void>;
-
-  printBarcode(
-    data: string,
-    type?: string,
-    width?: number,
-    height?: number,
-    textPosition?: string,
-    align?: string,
+  printFormattedText(
+    content: string,
+    feedPaperMM?: number,
+    cutPaper?: boolean,
+    openCashDrawer?: boolean
   ): Promise<void>;
 
-  printQRCode(data: string, size?: number, align?: string): Promise<void>;
-
-  feedPaper(mm: number): Promise<void>;
-
-  cutPaper(): Promise<void>;
-
-  openCashDrawer(): Promise<void>;
+  convertImageToEscPos(base64: string, align?: string, gradient?: boolean): Promise<string>;
 
   useEscAsteriskCommand(enable: boolean): Promise<void>;
 

@@ -731,77 +731,57 @@ class ExpoDantsuEscposModule : Module() {
             Unit
         }
 
-        // Print formatted ESC/POS text
-        Function("printText") { text: String ->
-            printer?.printFormattedText(text)
-                ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
+        // Print formatted ESC/POS text with support for images, barcodes, QR codes, and actions
+        Function("printFormattedText") { content: String, feedPaperMM: Float?, cutPaper: Boolean?, openCashDrawer: Boolean? ->
+            val p = printer ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
+            try {
+                when {
+                    cutPaper == true && openCashDrawer == true -> {
+                        // Print with both cut and cash drawer
+                        p.printFormattedTextAndOpenCashBox(content, feedPaperMM ?: 0f)
+                    }
+                    cutPaper == true -> {
+                        // Print with cut
+                        if (feedPaperMM != null && feedPaperMM > 0) {
+                            p.printFormattedText(content, feedPaperMM)
+                            p.printFormattedTextAndCut("")
+                        } else {
+                            p.printFormattedTextAndCut(content)
+                        }
+                    }
+                    openCashDrawer == true -> {
+                        // Print with cash drawer
+                        p.printFormattedTextAndOpenCashBox(content, feedPaperMM ?: 0f)
+                    }
+                    feedPaperMM != null && feedPaperMM > 0 -> {
+                        // Print with paper feed
+                        p.printFormattedText(content, feedPaperMM)
+                    }
+                    else -> {
+                        // Regular print
+                        p.printFormattedText(content)
+                    }
+                }
+            } catch (e: Exception) {
+                throw CodedException("E_PRINT_FORMATTED_TEXT", e)
+            }
         }
 
-        // Print a Base64 image
-        Function("printImage") { base64: String, gradient: Boolean? ->
+        // Helper function to convert base64 image to ESC/POS format
+        Function("convertImageToEscPos") { base64: String, align: String?, gradient: Boolean? ->
             val p = printer ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
             try {
                 val raw = Base64.decode(base64, Base64.DEFAULT)
                 val bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size)
                     ?: throw CodedException("E_DECODE_IMAGE", RuntimeException("Invalid image data"))
                 val hex = PrinterTextParserImg.bitmapToHexadecimalString(p, bmp, gradient ?: false)
-                p.printFormattedText("[C]<img>$hex</img>\n")
-            } catch (e: Exception) {
-                throw CodedException("E_PRINT_IMAGE", e)
-            }
-        }
-
-        // Print barcode
-        Function("printBarcode") { data: String, type: String?, width: Int?, height: Int?, textPosition: String?, align: String? ->
-            val p = printer ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
-            try {
                 val al = when (align?.uppercase()) {
                     "C" -> "[C]"; "R" -> "[R]"; else -> "[L]"
                 }
-                val tag = buildString {
-                    append(al).append("<barcode")
-                    type?.let { append(" type='$it'") }
-                    width?.let { append(" width='$it'") }
-                    height?.let { append(" height='$it'") }
-                    textPosition?.let { append(" text='$it'") }
-                    append(">$data</barcode>\n")
-                }
-                p.printFormattedText(tag)
+                "$al<img>$hex</img>"
             } catch (e: Exception) {
-                throw CodedException("E_PRINT_BARCODE", e)
+                throw CodedException("E_CONVERT_IMAGE", e)
             }
-        }
-
-        // Print QR code
-        Function("printQRCode") { data: String, size: Int?, align: String? ->
-            val p = printer ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
-            try {
-                val al = when (align?.uppercase()) {
-                    "C" -> "[C]"; "R" -> "[R]"; else -> "[L]"
-                }
-                val sz = size ?: 20
-                p.printFormattedText("$al<qrcode size='$sz'>$data</qrcode>\n")
-            } catch (e: Exception) {
-                throw CodedException("E_PRINT_QRCODE", e)
-            }
-        }
-
-        // Feed paper
-        Function("feedPaper") { mm: Float ->
-            printer?.printFormattedText("", mm)
-                ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
-        }
-
-        // Cut paper
-        Function("cutPaper") {
-            printer?.printFormattedTextAndCut("")
-                ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
-        }
-
-        // Open cash drawer
-        Function("openCashDrawer") {
-            printer?.printFormattedTextAndOpenCashBox("", 0)
-                ?: throw CodedException("E_NO_PRINTER", RuntimeException("Printer not connected"))
         }
 
         // ESC Asterisk command

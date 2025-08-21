@@ -1,6 +1,6 @@
 import {ReactNode, useEffect, useState} from 'react';
 import type {BluetoothDevice, UsbDevice, PrinterInfo, TcpDevice, BluetoothConnectionResult} from 'expo-dantsu-escpos';
-import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
+import ExpoEscposDantsuModule, { createEscPosBuilder, EscPosUtils } from 'expo-dantsu-escpos';
 import {
     Button,
     SafeAreaView,
@@ -22,9 +22,8 @@ export default function App() {
     const [connectionInfo, setConnectionInfo] = useState<BluetoothConnectionResult | null>(null);
     const [selectedDevice, setSelectedDevice] = useState<BluetoothDevice | null>(null);
     const [nameFilter, setNameFilter] = useState('');
-    const [text, setText] = useState('<C>Hello from Expo!</C>\n<BR>');
-    const [barcode, setBarcode] = useState('123456789012');
-    const [qr, setQr] = useState('https://expo.dev');
+    const [formattedText, setFormattedText] = useState('');
+    const [showExamples, setShowExamples] = useState(false);
     const [mm, setMm] = useState('10');
     const [mmPx, setMmPx] = useState<number | null>(null);
     const [printerInfo, setPrinterInfo] = useState<PrinterInfo | null>(null);
@@ -280,85 +279,139 @@ export default function App() {
 
                 {connected && (
                     <Group name="Printer Actions">
-                        <SectionHeader title="Print Text" />
+                        <SectionHeader title="Print Formatted Text (New Single Function)" />
+                        <View style={styles.actionRow}>
+                            <StyledButton
+                                title="Load Examples"
+                                icon="📋"
+                                onPress={() => {
+                                    setShowExamples(!showExamples);
+                                    if (!showExamples) {
+                                        const example = createEscPosBuilder()
+                                            .center('SAMPLE RECEIPT')
+                                            .newLine()
+                                            .center('========================')
+                                            .newLine()
+                                            .left('Item 1')
+                                            .right('$10.00')
+                                            .newLine()
+                                            .left('Item 2')
+                                            .right('$15.50')
+                                            .newLine()
+                                            .center('------------------------')
+                                            .newLine()
+                                            .bold('Total: $25.50')
+                                            .newLine()
+                                            .center('Thank you for your purchase!')
+                                            .newLine()
+                                            .qrcode('https://expo.dev', { size: 25, align: 'C' })
+                                            .newLine()
+                                            .barcode('123456789012', { align: 'C', height: 50 })
+                                            .newLine()
+                                            .build();
+                                        setFormattedText(example);
+                                    }
+                                }}
+                                loading={loading}
+                                style={styles.actionButton}
+                            />
+                            <StyledButton
+                                title="Clear Text"
+                                icon="🗑️"
+                                onPress={() => setFormattedText('')}
+                                loading={loading}
+                                style={styles.actionButton}
+                            />
+                        </View>
+                        
                         <TextInput
                             style={[styles.input, styles.multilineInput]}
-                            value={text}
-                            onChangeText={setText}
-                            placeholder="ESC/POS formatted text"
+                            value={formattedText}
+                            onChangeText={setFormattedText}
+                            placeholder="ESC/POS formatted text (use the builder or write manually)"
                             placeholderTextColor="#a0a0a0"
                             multiline={true}
                         />
-                        <StyledButton
-                            title="Print Text"
-                            icon="📄"
-                            onPress={() => handleOperation(async () =>
-                                ExpoEscposDantsuModule.printText(text)
-                            )}
-                            loading={loading}
-                        />
-
-                        <SectionHeader title="Print Barcode" />
-                        <TextInput
-                            style={styles.input}
-                            value={barcode}
-                            onChangeText={setBarcode}
-                            placeholder="Barcode data"
-                            placeholderTextColor="#a0a0a0"
-                        />
-                        <StyledButton
-                            title="Print Barcode"
-                            icon="📊"
-                            onPress={() => handleOperation(async () =>
-                                ExpoEscposDantsuModule.printBarcode(barcode)
-                            )}
-                            loading={loading}
-                        />
-
-                        <SectionHeader title="Print QR Code" />
-                        <TextInput
-                            style={styles.input}
-                            value={qr}
-                            onChangeText={setQr}
-                            placeholder="QR code data"
-                            placeholderTextColor="#a0a0a0"
-                        />
-                        <StyledButton
-                            title="Print QR Code"
-                            icon="📱"
-                            onPress={() => handleOperation(async () =>
-                                ExpoEscposDantsuModule.printQRCode(qr)
-                            )}
-                            loading={loading}
-                        />
-
-                        <SectionHeader title="Printer Controls" />
+                        
                         <View style={styles.actionRow}>
                             <StyledButton
-                                title="Feed 5mm"
-                                icon="⬇️"
+                                title="Print Only"
+                                icon="🖨️"
                                 onPress={() => handleOperation(async () =>
-                                    ExpoEscposDantsuModule.feedPaper(5)
+                                    ExpoEscposDantsuModule.printFormattedText(formattedText)
                                 )}
                                 loading={loading}
                                 style={styles.actionButton}
                             />
                             <StyledButton
-                                title="Cut Paper"
+                                title="Print & Cut"
                                 icon="✂️"
                                 onPress={() => handleOperation(async () =>
-                                    ExpoEscposDantsuModule.cutPaper()
+                                    ExpoEscposDantsuModule.printFormattedText(formattedText, undefined, true)
                                 )}
                                 loading={loading}
                                 style={styles.actionButton}
                             />
                         </View>
+                        
                         <View style={styles.actionRow}>
                             <StyledButton
-                                title="Cash Drawer"
+                                title="Print & Feed 5mm"
+                                icon="⬇️"
+                                onPress={() => handleOperation(async () =>
+                                    ExpoEscposDantsuModule.printFormattedText(formattedText, 5)
+                                )}
+                                loading={loading}
+                                style={styles.actionButton}
+                            />
+                            <StyledButton
+                                title="Print & Cash Drawer"
                                 icon="💰"
                                 onPress={() => handleOperation(async () =>
-                                    ExpoEscposDantsuModule.openCashDrawer()
+                                    ExpoEscposDantsuModule.printFormattedText(formattedText, undefined, false, true)
+                                )}
+                                loading={loading}
+                                style={styles.actionButton}
+                            />
+                        </View>
+                        
+                        <StyledButton
+                            title="Print, Feed 5mm, Cut & Open Drawer"
+                            icon="🎯"
+                            onPress={() => handleOperation(async () =>
+                                ExpoEscposDantsuModule.printFormattedText(formattedText, 5, true, true)
+                            )}
+                            loading={loading}
+                        />
+
+                        <SectionHeader title="Quick Actions" />
+                        <View style={styles.actionRow}>
+                            <StyledButton
+                                title="Feed Only"
+                                icon="⬇️"
+                                onPress={() => handleOperation(async () =>
+                                    ExpoEscposDantsuModule.printFormattedText('', 5)
+                                )}
+                                loading={loading}
+                                style={styles.actionButton}
+                            />
+                            <StyledButton
+                                title="Cut Only"
+                                icon="✂️"
+                                onPress={() => handleOperation(async () =>
+                                    ExpoEscposDantsuModule.printFormattedText('', undefined, true)
+                                )}
+                                loading={loading}
+                                style={styles.actionButton}
+                            />
+                        </View>
+                        
+                        <View style={styles.actionRow}>
+                            <StyledButton
+                                title="Cash Drawer Only"
+                                icon="💰"
+                                onPress={() => handleOperation(async () =>
+                                    ExpoEscposDantsuModule.printFormattedText('', undefined, false, true)
                                 )}
                                 loading={loading}
                                 style={styles.actionButton}
@@ -374,6 +427,26 @@ export default function App() {
                                 style={styles.actionButton}
                             />
                         </View>
+                        
+                        {showExamples && (
+                            <View style={styles.examplesContainer}>
+                                <SectionHeader title="Builder Examples" />
+                                <Text style={styles.exampleText}>Use the builder pattern:</Text>
+                                <Text style={styles.codeText}>{`createEscPosBuilder()
+  .center('STORE NAME')
+  .newLine()
+  .left('Item').right('Price')
+  .qrcode('data', {size: 25})
+  .barcode('123456789')
+  .build()`}</Text>
+                                
+                                <Text style={styles.exampleText}>Direct ESC/POS syntax:</Text>
+                                <Text style={styles.codeText}>{`[C]<b>BOLD CENTERED</b>
+[L]Left text[R]Right text
+<qrcode size='20'>QR Data</qrcode>
+<barcode type='EAN13'>123456789012</barcode>`}</Text>
+                            </View>
+                        )}
 
                         <SectionHeader title="Printer Information" />
                         <StyledButton
@@ -555,8 +628,32 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     multilineInput: {
-        height: 100,
+        height: 120,
         textAlignVertical: 'top',
+    },
+    examplesContainer: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+        padding: 12,
+        marginVertical: 8,
+        borderLeftWidth: 4,
+        borderLeftColor: '#4C6EF5',
+    },
+    exampleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#495057',
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    codeText: {
+        fontSize: 12,
+        fontFamily: 'monospace',
+        backgroundColor: '#e9ecef',
+        padding: 8,
+        borderRadius: 4,
+        color: '#495057',
+        marginBottom: 8,
     },
     button: {
         backgroundColor: '#4C6EF5',

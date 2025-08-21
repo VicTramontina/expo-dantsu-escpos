@@ -33,33 +33,16 @@ declare class ExpoDantsuEscposModule extends NativeModule<ExpoDantsuEscposModule
   /** Disconnect from the printer */
   disconnect(): Promise<void>;
 
-  /** Print ESC/POS formatted text */
-  printText(text: string): Promise<void>;
-
-  /** Print a base64 encoded image */
-  printImage(base64: string, gradient?: boolean): Promise<void>;
-
-  /** Print a barcode */
-  printBarcode(
-    data: string,
-    type?: string,
-    width?: number,
-    height?: number,
-    textPosition?: string,
-    align?: string,
+  /** Print ESC/POS formatted text with optional paper feed, cut, and cash drawer actions */
+  printFormattedText(
+    content: string,
+    feedPaperMM?: number,
+    cutPaper?: boolean,
+    openCashDrawer?: boolean
   ): Promise<void>;
 
-  /** Print a QR code */
-  printQRCode(data: string, size?: number, align?: string): Promise<void>;
-
-  /** Feed paper in millimeters */
-  feedPaper(mm: number): Promise<void>;
-
-  /** Cut the paper */
-  cutPaper(): Promise<void>;
-
-  /** Open the cash drawer */
-  openCashDrawer(): Promise<void>;
+  /** Convert base64 image to ESC/POS format string */
+  convertImageToEscPos(base64: string, align?: string, gradient?: boolean): Promise<string>;
 
   /** Use ESC asterisk command */
   useEscAsteriskCommand(enable: boolean): Promise<void>;

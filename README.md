@@ -100,37 +100,31 @@ Connects to a TCP printer.
 Disconnects from the printer.
 - **Returns**: `Promise<void>`
 
-#### `printText(text: string)`
-Prints ESC/POS formatted text.
+#### `printFormattedText(content: string, feedPaperMM?: number, cutPaper?: boolean, openCashDrawer?: boolean)`
+**New Unified Function**: Prints ESC/POS formatted text with optional actions in a single call, following the DantSu library pattern.
+
 - **Parameters**:
-  - `text`: ESC/POS formatted text (e.g., `<C>Hello</C>`).
+  - `content`: ESC/POS formatted text with embedded tags (images, barcodes, QR codes, formatting)
+  - `feedPaperMM` (optional): Feed paper in millimeters after printing
+  - `cutPaper` (optional): Cut paper after printing
+  - `openCashDrawer` (optional): Open cash drawer after printing
 - **Returns**: `Promise<void>`
 
-#### `printImage(base64: string, gradient?: boolean)`
-Prints a base64-encoded image.
-- **Parameters**:
-  - `base64`: Base64 string of the image.
-  - `gradient` (optional): Whether to apply a gradient.
-- **Returns**: `Promise<void>`
+**ESC/POS Formatting Syntax**:
+- **Alignment**: `[L]` (left), `[C]` (center), `[R]` (right)
+- **Text Formatting**: `<b>bold</b>`, `<u>underline</u>`, `<font size='big'>large</font>`
+- **Images**: `<img>hexdata</img>` (use `convertImageToEscPos()` helper)
+- **Barcodes**: `<barcode type='EAN13' width='2' height='50'>123456789012</barcode>`
+- **QR Codes**: `<qrcode size='25'>https://example.com</qrcode>`
+- **Line Breaks**: `\n` or `<BR>`
 
-#### `printBarcode(data: string, type?: string, width?: number, height?: number, textPosition?: string, align?: string)`
-Prints a barcode.
+#### `convertImageToEscPos(base64: string, align?: string, gradient?: boolean)`
+Converts a base64 image to ESC/POS format string for embedding in `printFormattedText()`.
 - **Parameters**:
-  - `data`: Barcode data.
-  - `type` (optional): Barcode type.
-  - `width` (optional): Width of the barcode.
-  - `height` (optional): Height of the barcode.
-  - `textPosition` (optional): Position of the text.
-  - `align` (optional): Alignment.
-- **Returns**: `Promise<void>`
-
-#### `printQRCode(data: string, size?: number, align?: string)`
-Prints a QR code.
-- **Parameters**:
-  - `data`: QR code data.
-  - `size` (optional): Size of the QR code.
-  - `align` (optional): Alignment.
-- **Returns**: `Promise<void>`
+  - `base64`: Base64 string of the image
+  - `align` (optional): Alignment ('L', 'C', 'R')
+  - `gradient` (optional): Whether to apply gradient
+- **Returns**: `Promise<string>` - ESC/POS formatted image string
 
 ### Type Definitions
 
@@ -179,6 +173,27 @@ Prints a QR code.
 - `widthMM`: Width in millimeters.
 - `widthPx`: Width in pixels.
 - `charsPerLine`: Characters per line.
+
+#### `EscPosTextBuilder`
+Fluent interface for building ESC/POS formatted text:
+- `text(content: string)`: Add plain text
+- `center(content: string)`: Add centered text
+- `left(content: string)`: Add left-aligned text  
+- `right(content: string)`: Add right-aligned text
+- `bold(content: string)`: Add bold text
+- `underline(content: string)`: Add underlined text
+- `fontBig(content: string)`: Add large font text
+- `fontTall(content: string)`: Add tall font text
+- `image(base64: string, align?, gradient?)`: Add image
+- `barcode(data: string, options?)`: Add barcode
+- `qrcode(data: string, options?)`: Add QR code
+- `newLine()`: Add line break
+- `build()`: Build final ESC/POS string
+
+#### `PrintOptions`
+- `feedPaperMM?`: Feed paper in millimeters after printing
+- `cutPaper?`: Cut paper after printing  
+- `openCashDrawer?`: Open cash drawer after printing
 
 ### Permissions
 
@@ -235,41 +250,62 @@ Ensure network access is enabled in your app.
 
 ### Example Usage
 
-Refer to the `example` directory for a comprehensive working example. Below are snippets demonstrating the enhanced Bluetooth functionality:
+Refer to the `example` directory for a comprehensive working example. Below are snippets demonstrating the new unified printing approach:
 
-#### Enhanced Bluetooth Workflow
+#### New Unified Printing Approach
 ```tsx
-import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
+import ExpoEscposDantsuModule, { createEscPosBuilder, EscPosUtils } from 'expo-dantsu-escpos';
 
-async function enhancedBluetoothPrint() {
+async function enhancedPrintingWorkflow() {
   try {
-    // 1. Discover all available devices
+    // 1. Connect to printer (same as before)
     const devices = await ExpoEscposDantsuModule.getBluetoothDevices({
       scanMillis: 6000,
       includeRssi: true,
-      nameRegex: 'printer' // Optional: filter for printers
+      nameRegex: 'printer'
     });
     
-    console.log(`Found ${devices.length} devices`);
-    devices.forEach(device => {
-      console.log(`${device.deviceName} (${device.address}) - ${device.bonded ? 'Bonded' : 'Discovered'} - ${device.rssi}dBm`);
-    });
-    
-    // 2. Select and connect to a device
-    const targetDevice = devices[0]; // Select the first device
-    const connectionResult = await ExpoEscposDantsuModule.connectBluetooth({
+    const targetDevice = devices[0];
+    await ExpoEscposDantsuModule.connectBluetooth({
       address: targetDevice.address,
-      nameHint: targetDevice.deviceName,
-      preferInsecureIfUnbonded: true, // Key for corporate ROMs
-      allowSecureFallback: true,
-      timeoutMs: 15000
+      preferInsecureIfUnbonded: true,
+      allowSecureFallback: true
     });
     
-    console.log(`Connected using ${connectionResult.connectionMode} mode`);
+    // 2. Build content using the fluent builder (recommended)
+    const receipt = createEscPosBuilder()
+      .center('MY STORE')
+      .newLine()
+      .center('123 Main St, City')
+      .newLine()
+      .center('========================')
+      .newLine()
+      .left('Coffee').right('$4.50')
+      .newLine()
+      .left('Sandwich').right('$8.95')
+      .newLine()
+      .center('------------------------')
+      .newLine()
+      .bold('Total: $13.45')
+      .newLine()
+      .center('Thank you!')
+      .newLine()
+      .qrcode('https://mystore.com/receipt/123', { size: 25, align: 'C' })
+      .newLine()
+      .barcode('1234567890123', { 
+        type: 'EAN13', 
+        height: 50, 
+        align: 'C' 
+      })
+      .build();
     
-    // 3. Print content
-    await ExpoEscposDantsuModule.printText('<C>Enhanced Bluetooth Print</C>\n<BR>');
-    await ExpoEscposDantsuModule.printQRCode('https://example.com', 20, 'C');
+    // 3. Print everything in one call with actions
+    await ExpoEscposDantsuModule.printFormattedText(
+      receipt,
+      5,     // Feed 5mm
+      true,  // Cut paper
+      true   // Open cash drawer
+    );
     
     // 4. Disconnect
     await ExpoEscposDantsuModule.disconnect();
@@ -280,20 +316,124 @@ async function enhancedBluetoothPrint() {
 }
 ```
 
-#### Legacy Bluetooth (Backward Compatible)
+#### Direct ESC/POS Syntax (Alternative)
 ```tsx
-import ExpoEscposDantsuModule from 'expo-dantsu-escpos';
-
-async function legacyBluetoothPrint() {
-  // Note: Legacy method still works but requires bonded devices
-  const devices = await ExpoEscposDantsuModule.getBluetoothDevices({ includeBondedOnly: true });
+async function directEscPosPrint() {
+  // You can also write ESC/POS directly
+  const content = `
+[C]<b><font size='big'>RECEIPT</font></b>
+[C]========================
+[L]Item 1[R]$10.00
+[L]Item 2[R]$15.50
+[C]------------------------
+[C]<b>Total: $25.50</b>
+[C]<qrcode size='20'>https://expo.dev</qrcode>
+[C]<barcode type='EAN13'>123456789012</barcode>
+  `;
   
-  if (devices.length > 0) {
-    await ExpoEscposDantsuModule.connectBluetooth({ address: devices[0].address });
-    await ExpoEscposDantsuModule.printText('<C>Hello World</C>\n<BR>');
-    await ExpoEscposDantsuModule.disconnect();
-  }
+  await ExpoEscposDantsuModule.printFormattedText(content, 5, true);
 }
+```
+
+#### Adding Images
+```tsx
+async function printWithImage() {
+  // Convert image first
+  const imageEscPos = await ExpoEscposDantsuModule.convertImageToEscPos(
+    base64ImageData, 
+    'C', 
+    false
+  );
+  
+  // Build content with image
+  const content = createEscPosBuilder()
+    .center('STORE LOGO')
+    .newLine()
+    .text(imageEscPos)  // Insert converted image
+    .newLine()
+    .center('Welcome!')
+    .build();
+  
+  await ExpoEscposDantsuModule.printFormattedText(content);
+}
+```
+
+#### Utility Functions
+```tsx
+import { EscPosUtils } from 'expo-dantsu-escpos';
+
+// Quick receipt building
+const receipt = 
+  EscPosUtils.receiptHeader('My Store', '123 Main St') +
+  EscPosUtils.lineItem('Coffee', '$4.50', 2) +
+  EscPosUtils.lineItem('Sandwich', '$8.95') +
+  EscPosUtils.separator() +
+  EscPosUtils.lineItem('Total', '$17.95') +
+  EscPosUtils.receiptFooter('Thank you for your business!');
+
+await ExpoEscposDantsuModule.printFormattedText(receipt, 5, true);
+```
+
+### Builder Pattern API
+
+The new `createEscPosBuilder()` provides a fluent interface for building receipts:
+
+```tsx
+import { createEscPosBuilder } from 'expo-dantsu-escpos';
+
+const content = createEscPosBuilder()
+  .center('CENTERED TEXT')        // [C]CENTERED TEXT
+  .left('LEFT TEXT')              // [L]LEFT TEXT  
+  .right('RIGHT TEXT')            // [R]RIGHT TEXT
+  .bold('BOLD TEXT')              // <b>BOLD TEXT</b>
+  .underline('UNDERLINED')        // <u>UNDERLINED</u>
+  .fontBig('BIG FONT')           // <font size='big'>BIG FONT</font>
+  .fontTall('TALL FONT')         // <font size='tall'>TALL FONT</font>
+  .qrcode('QR Data', {           // <qrcode size='25'>QR Data</qrcode>
+    size: 25,
+    align: 'C'
+  })
+  .barcode('123456789012', {     // [C]<barcode type='EAN13'>123456789012</barcode>
+    type: 'EAN13',
+    align: 'C'
+  })
+  .newLine()                     // \n
+  .build();                      // Returns final string
+```
+
+### Key Improvements
+
+✅ **Single Function Call**: No more multiple requests to the printer  
+✅ **Atomic Operations**: Print, feed, cut, and open drawer in one transaction  
+✅ **Builder Pattern**: Easy-to-use fluent interface for complex receipts  
+✅ **Direct ESC/POS**: Full control with direct syntax  
+✅ **Utility Functions**: Pre-built patterns for common receipt elements  
+✅ **Backward Compatible**: All connection methods remain the same  
+
+### Migration from Multiple Functions
+
+**Before (Multiple Calls)**:
+```tsx
+// OLD - Multiple separate calls
+await ExpoEscposDantsuModule.printText('[C]My Store\n');
+await ExpoEscposDantsuModule.printQRCode('https://expo.dev', 20, 'C');
+await ExpoEscposDantsuModule.printBarcode('123456789012');
+await ExpoEscposDantsuModule.feedPaper(5);
+await ExpoEscposDantsuModule.cutPaper();
+```
+
+**After (Single Call)**:
+```tsx
+// NEW - Single call with everything
+const content = createEscPosBuilder()
+  .center('My Store')
+  .newLine()
+  .qrcode('https://expo.dev', { size: 20, align: 'C' })
+  .newLine()
+  .barcode('123456789012', { align: 'C' })
+  .build();
+
+await ExpoEscposDantsuModule.printFormattedText(content, 5, true);
 ```
 
 ### Debugging and Logging
