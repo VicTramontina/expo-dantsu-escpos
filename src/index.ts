@@ -2,4 +2,3 @@
 // and on native platforms to ExpoDantsuEscposModule.ts
 export { default } from './ExpoDantsuEscposModule';
 export * from './ExpoDantsuEscpos.types';
-export * from './EscPosBuilder';
