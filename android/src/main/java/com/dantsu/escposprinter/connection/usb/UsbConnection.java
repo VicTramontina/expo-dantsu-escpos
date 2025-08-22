@@ -75,6 +75,7 @@ public class UsbConnection extends DeviceConnection {
     public void send() throws EscPosConnectionException {
         this.send(0);
     }
+
     /**
      * Send data to the device.
      */

@@ -1,8 +1,10 @@
-import { NativeModule, requireNativeModule } from "expo";
-declare class ExpoDantsuEscposModule extends NativeModule {
-}
+import { requireNativeModule } from "expo-modules-core";
 
-// This call loads the native module object from the JSI.
-export default requireNativeModule<ExpoDantsuEscposModule>(
+import type { ExpoDantsuEscposModule as ExpoDantsuEscposModuleType } from "./ExpoDantsuEscpos.types";
+
+const nativeModule = requireNativeModule<ExpoDantsuEscposModuleType>(
   "ExpoDantsuEscposModule",
 );
+
+export default nativeModule;
+
