@@ -73,9 +73,16 @@ public class BluetoothConnection extends DeviceConnection {
             this.outputStream = this.socket.getOutputStream();
             this.data = new byte[0];
         } catch (IOException e) {
-            e.printStackTrace();
-            this.disconnect();
-            throw new EscPosConnectionException("Unable to connect to bluetooth device.");
+            try {
+                this.socket = this.device.createInsecureRfcommSocketToServiceRecord(uuid);
+                this.socket.connect();
+                this.outputStream = this.socket.getOutputStream();
+                this.data = new byte[0];
+            } catch (IOException e2) {
+                e2.printStackTrace();
+                this.disconnect();
+                throw new EscPosConnectionException("Unable to connect to bluetooth device.");
+            }
         }
         return this;
     }

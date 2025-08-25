@@ -1,5 +1,6 @@
 export interface ExpoDantsuEscposModule {
   getBluetoothDevices(): Promise<{ name: string; address: string }[]>;
+  getUnpairedBluetoothDevices(): Promise<{ name: string; address: string }[]>;
   connectBluetooth(
     address: string,
     dpi: number,

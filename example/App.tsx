@@ -5,6 +5,7 @@ import {
     View,
     Text,
     FlatList,
+    ScrollView,
     TouchableOpacity,
     TextInput,
     Button,
@@ -18,12 +19,14 @@ type Tab = typeof TABS[number];
 export default function App() {
     const [tab, setTab] = useState<Tab>('Bluetooth');
     const [bluetoothDevices, setBluetoothDevices] = useState<Array<{ name: string; address: string }>>([]);
+    const [unpairedBluetoothDevices, setUnpairedBluetoothDevices] = useState<Array<{ name: string; address: string }>>([]);
     const [usbDevices, setUsbDevices] = useState<Array<{ name: string; vendorId: number; productId: number }>>([]);
     const [selectedBt, setSelectedBt] = useState<string | null>(null);
     const [selectedUsb, setSelectedUsb] = useState<{ vendorId: number; productId: number } | null>(null);
     const [tcpAddress, setTcpAddress] = useState('192.168.0.100');
     const [tcpPort, setTcpPort] = useState('9100');
     const [connected, setConnected] = useState(false);
+    const [isDiscovering, setIsDiscovering] = useState(false);
 
     useEffect(() => {
         if (tab === 'Bluetooth') {
@@ -32,6 +35,18 @@ export default function App() {
             Escpos.getUSBDevices().then(setUsbDevices).catch(console.error);
         }
     }, [tab]);
+
+    const discoverUnpairedDevices = async () => {
+        setIsDiscovering(true);
+        try {
+            const devices = await Escpos.getUnpairedBluetoothDevices();
+            setUnpairedBluetoothDevices(devices);
+        } catch (e: any) {
+            Alert.alert('Discovery Error', e.message || String(e));
+        } finally {
+            setIsDiscovering(false);
+        }
+    };
 
     const connect = async () => {
         try {
@@ -56,13 +71,8 @@ export default function App() {
         setConnected(false);
     };
 
-    const printTest = async (method: 'printFormattedText' | 'printFormattedTextAndCut' | 'printFormattedTextAndOpenCashBox') => {
-        if (!connected) {
-            Alert.alert('Not connected', 'Please connect to a printer first');
-            return;
-        }
-        const sampleReceipt =
-            "[C]<u><font size='big'>ORDER N°045</font></u>\n" +
+    const getSampleReceipt = () => {
+        return "[C]<u><font size='big'>ORDER N°045</font></u>\n" +
             "[L]\n" +
             "[C]================================\n" +
             "[L]\n" +
@@ -90,6 +100,14 @@ export default function App() {
             "[L]\n" +
             "[L]\n" +
             "[L]\n";
+    };
+
+    const printTest = async (method: 'printFormattedText' | 'printFormattedTextAndCut' | 'printFormattedTextAndOpenCashBox') => {
+        if (!connected) {
+            Alert.alert('Not connected', 'Please connect to a printer first');
+            return;
+        }
+        const sampleReceipt = getSampleReceipt();
         try {
             if (method === 'printFormattedText') {
                 await Escpos.printFormattedText(sampleReceipt, 100);
@@ -100,6 +118,32 @@ export default function App() {
             }
         } catch (e: any) {
             Alert.alert('Print Error', e.message || String(e));
+        }
+    };
+
+    const flashTest = async () => {
+        try {
+            if (tab === 'Bluetooth' && selectedBt) {
+                await Escpos.connectBluetooth(selectedBt, 203, 80, 48);
+            } else if (tab === 'USB' && selectedUsb) {
+                const {vendorId, productId} = selectedUsb;
+                await Escpos.connectUSB(vendorId, productId, 203, 80, 48);
+            } else if (tab === 'TCP') {
+                await Escpos.connectTCP(tcpAddress, parseInt(tcpPort), 203, 80, 48);
+            } else {
+                Alert.alert('No Device Selected', 'Please select a device first');
+                return;
+            }
+            
+            const sampleReceipt = getSampleReceipt();
+            await Escpos.printFormattedTextAndCut(sampleReceipt, 100);
+            
+            await Escpos.disconnectPrinter();
+        } catch (e: any) {
+            Alert.alert('Flash Test Error', e.message || String(e));
+            try {
+                await Escpos.disconnectPrinter();
+            } catch {}
         }
     };
 
@@ -117,38 +161,61 @@ export default function App() {
             </View>
             <View style={styles.content}>
                 {tab === 'Bluetooth' && (
-                    <FlatList
-                        contentContainerStyle={styles.contentPadding}
-                        data={bluetoothDevices}
-                        keyExtractor={(item) => item.address}
-                        ListHeaderComponent={() => (
-                            <Text style={styles.title}>Bluetooth Devices</Text>
-                        )}
-                        renderItem={({item}) => (
+                    <ScrollView contentContainerStyle={styles.contentPadding}>
+                        <Text style={styles.title}>Paired Devices</Text>
+                        {bluetoothDevices.map((item) => (
                             <TouchableOpacity
-                                style={[styles.item, selectedBt === item.address && styles.selectedItem]}
+                                key={item.address}
+                                style={[styles.item, styles.pairedItem, selectedBt === item.address && styles.selectedItem]}
                                 onPress={() => setSelectedBt(item.address)}
                             >
-                                <Text>{item.name}</Text>
-                                <Text>{item.address}</Text>
+                                <View style={styles.deviceInfo}>
+                                    <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
+                                    <Text style={styles.deviceAddress}>{item.address}</Text>
+                                </View>
+                                <Text style={styles.pairedBadge}>Paired</Text>
                             </TouchableOpacity>
-                        )}
-                        ListFooterComponent={() => (
-                            <View>
-                                <Button title="Connect" onPress={connect} disabled={!selectedBt} />
-                                {connected && (
-                                    <View style={styles.printButtons}>
-                                        <Text style={styles.title}>Print Methods</Text>
-                                        <Button title="Print Text" onPress={() => printTest('printFormattedText')} />
-                                        <Button title="Print & Cut" onPress={() => printTest('printFormattedTextAndCut')} />
-                                        <Button title="Print & Open Cash Box" onPress={() => printTest('printFormattedTextAndOpenCashBox')} />
-                                        <View style={{ height: 8 }} />
-                                        <Button title="Disconnect" color="#b00" onPress={disconnect} />
-                                    </View>
-                                )}
+                        ))}
+
+                        <View style={styles.sectionDivider}>
+                            <Text style={styles.title}>Nearby Devices</Text>
+                            <Button
+                                title={isDiscovering ? "Discovering..." : "Discover Devices"}
+                                onPress={discoverUnpairedDevices}
+                                disabled={isDiscovering}
+                            />
+                        </View>
+
+                        {unpairedBluetoothDevices.map((item) => (
+                            <TouchableOpacity
+                                key={item.address}
+                                style={[styles.item, styles.unpairedItem, selectedBt === item.address && styles.selectedItem]}
+                                onPress={() => setSelectedBt(item.address)}
+                            >
+                                <View style={styles.deviceInfo}>
+                                    <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
+                                    <Text style={styles.deviceAddress}>{item.address}</Text>
+                                </View>
+                                <Text style={styles.unpairedBadge}>Unpaired</Text>
+                            </TouchableOpacity>
+                        ))}
+
+                        <View style={styles.buttonRow}>
+                            <Button title="Connect" onPress={connect} disabled={!selectedBt} />
+                            <Button title="Flash Test" onPress={flashTest} disabled={!selectedBt} />
+                        </View>
+
+                        {connected && (
+                            <View style={styles.printButtons}>
+                                <Text style={styles.title}>Print Methods</Text>
+                                <Button title="Print Text" onPress={() => printTest('printFormattedText')} />
+                                <Button title="Print & Cut" onPress={() => printTest('printFormattedTextAndCut')} />
+                                <Button title="Print & Open Cash Box" onPress={() => printTest('printFormattedTextAndOpenCashBox')} />
+                                <View style={{ height: 8 }} />
+                                <Button title="Disconnect" color="#b00" onPress={disconnect} />
                             </View>
                         )}
-                    />
+                    </ScrollView>
                 )}
                 {tab === 'USB' && (
                     <FlatList
@@ -169,7 +236,10 @@ export default function App() {
                         )}
                         ListFooterComponent={() => (
                             <View>
-                                <Button title="Connect" onPress={connect} disabled={!selectedUsb} />
+                                <View style={styles.buttonRow}>
+                                    <Button title="Connect" onPress={connect} disabled={!selectedUsb} />
+                                    <Button title="Flash Test" onPress={flashTest} disabled={!selectedUsb} />
+                                </View>
                                 {connected && (
                                     <View style={styles.printButtons}>
                                         <Text style={styles.title}>Print Methods</Text>
@@ -200,7 +270,10 @@ export default function App() {
                             placeholder="Port"
                             keyboardType="numeric"
                         />
-                        <Button title="Connect" onPress={connect} />
+                        <View style={styles.buttonRow}>
+                            <Button title="Connect" onPress={connect} />
+                            <Button title="Flash Test" onPress={flashTest} />
+                        </View>
                         {connected && (
                             <View style={styles.printButtons}>
                                 <Text style={styles.title}>Print Methods</Text>
@@ -227,8 +300,17 @@ const styles = StyleSheet.create({
     content: {flex: 1},
     contentPadding: {padding: 16},
     title: {fontSize: 18, fontWeight: 'bold', marginVertical: 8},
-    item: {padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 4, marginVertical: 4},
+    item: {padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 4, marginVertical: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
     selectedItem: {backgroundColor: '#eef'},
+    pairedItem: {borderColor: '#4CAF50', borderWidth: 2},
+    unpairedItem: {borderColor: '#FF9800', borderStyle: 'dashed'},
+    deviceInfo: {flex: 1},
+    deviceName: {fontSize: 16, fontWeight: '600'},
+    deviceAddress: {fontSize: 14, color: '#666', marginTop: 2},
+    pairedBadge: {backgroundColor: '#4CAF50', color: 'white', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, fontSize: 12, fontWeight: 'bold'},
+    unpairedBadge: {backgroundColor: '#FF9800', color: 'white', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, fontSize: 12, fontWeight: 'bold'},
+    sectionDivider: {marginTop: 20, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
     input: {borderWidth: 1, borderColor: '#ccc', borderRadius: 4, padding: 8, marginVertical: 4},
     printButtons: {marginTop: 16},
+    buttonRow: {flexDirection: 'row', justifyContent: 'space-around', marginVertical: 8},
 });

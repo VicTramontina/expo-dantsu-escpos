@@ -33,6 +33,17 @@ class ExpoDantsuEscposModule : Module() {
             list
         }
 
+        AsyncFunction("getUnpairedBluetoothDevices") {
+            val list = mutableListOf<Map<String, String>>()
+            val context = appContext.reactContext ?: throw Exception("No React context available")
+            BluetoothConnections().getUnpairedList(context)?.forEach { conn ->
+                conn.device?.let { device ->
+                    list.add(mapOf("name" to (device.name ?: ""), "address" to device.address))
+                }
+            }
+            list
+        }
+
         AsyncFunction("connectBluetooth") { address: String, dpi: Int, widthMM: Double, nbrCharactersPerLine: Int ->
             val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
             val device = adapter.getRemoteDevice(address)
