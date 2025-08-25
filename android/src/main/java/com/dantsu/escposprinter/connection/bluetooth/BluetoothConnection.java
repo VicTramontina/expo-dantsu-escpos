@@ -74,6 +74,9 @@ public class BluetoothConnection extends DeviceConnection {
             this.data = new byte[0];
         } catch (IOException e) {
             try {
+                // making sure the previous socket is closed
+                this.disconnect();
+
                 this.socket = this.device.createInsecureRfcommSocketToServiceRecord(uuid);
                 this.socket.connect();
                 this.outputStream = this.socket.getOutputStream();
