@@ -1,7 +1,6 @@
 package expo.modules.dantsuescpos
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
@@ -39,15 +38,13 @@ class ExpoDantsuEscposModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("ExpoDantsuEscposModule")
 
-        // You can emit later if you wire into dantsu's disconnect callbacks
         Events("printerDisconnected")
 
         /**
-         * ========== BLUETOOTH LIST (PAIRED) ==========
-         * Will request BLUETOOTH_CONNECT (Android 12+) and to enable BT if powered off.
-         * If it had to request, it throws a coded error; call this function again afterwards.
+         * BLUETOOTH: List paired devices.
+         * If permissions or BT power are missing, we trigger the system dialog and throw a coded error.
+         * Call the same method again after the user responds.
          */
-        @SuppressLint("MissingPermission")
         AsyncFunction("getBluetoothDevices") {
             val activity = currentActivityOrThrow()
             if (!ensureBluetoothEnabled(activity)) {
@@ -75,11 +72,8 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== BLUETOOTH LIST (UNPAIRED / DISCOVERY) ==========
-         * Will request BLUETOOTH_SCAN (+ CONNECT) on Android 12+, or FINE_LOCATION on older.
-         * Also asks user to enable BT if off.
+         * BLUETOOTH: Discover unpaired devices.
          */
-        @SuppressLint("MissingPermission")
         AsyncFunction("getUnpairedBluetoothDevices") {
             val activity = currentActivityOrThrow()
             if (!ensureBluetoothEnabled(activity)) {
@@ -108,10 +102,8 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== BLUETOOTH CONNECT ==========
-         * Requests enable and permissions if needed before connecting.
+         * BLUETOOTH: Connect to a device by MAC address.
          */
-        @SuppressLint("MissingPermission")
         AsyncFunction("connectBluetooth") { address: String, dpi: Int, widthMM: Double, nbrCharactersPerLine: Int ->
             val activity = currentActivityOrThrow()
             if (!ensureBluetoothEnabled(activity)) {
@@ -149,7 +141,7 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== DISCONNECT ==========
+         * Disconnect current printer (any transport).
          */
         AsyncFunction("disconnectPrinter") {
             try {
@@ -163,7 +155,7 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== PRINTING ==========
+         * Printing helpers (no permissions required here; we just require an active printer).
          */
         AsyncFunction("useEscAsteriskCommand") { enable: Boolean ->
             printerOrThrow().useEscAsteriskCommand(enable)
@@ -189,14 +181,13 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== USB LIST ==========
-         * Just enumerates. No permission needed for listing.
+         * USB: List USB devices (no permission required to enumerate).
          */
         AsyncFunction("getUSBDevices") {
             val activity = currentActivityOrThrow()
             val context = appContext.reactContext ?: activity.applicationContext
             val list = mutableListOf<Map<String, Any>>()
-            UsbConnections(context).list?.forEach { conn ->
+            UsbConnections(context).getList()?.forEach { conn ->
                 val device = conn.device
                 list.add(
                     mapOf(
@@ -210,15 +201,14 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== USB CONNECT ==========
-         * Will request (and trigger system dialog for) USB permission if needed.
-         * If permission is requested now, throws USB_PERMISSION_REQUESTED; call again after user responds.
+         * USB: Connect to a device by vendorId/productId.
+         * If permission is missing, request it and throw a coded error; call again afterward.
          */
         AsyncFunction("connectUSB") { vendorId: Int, productId: Int, dpi: Int, widthMM: Double, nbrCharactersPerLine: Int ->
             val activity = currentActivityOrThrow()
             val context = appContext.reactContext ?: activity.applicationContext
 
-            val usbConn = UsbConnections(context).list
+            val usbConn = UsbConnections(context).getList()
                 ?.firstOrNull { it.device.vendorId == vendorId && it.device.productId == productId }
                 ?: throw CodedException(
                     "USB_NOT_FOUND",
@@ -230,7 +220,6 @@ class ExpoDantsuEscposModule : Module() {
             val manager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
             if (!manager.hasPermission(device)) {
-                // Trigger permission dialog and exit; user will act, then your JS can call this again.
                 requestUsbPermissionOnce(activity, manager, device)
                 throw CodedException(
                     "USB_PERMISSION_REQUESTED",
@@ -250,7 +239,7 @@ class ExpoDantsuEscposModule : Module() {
         }
 
         /**
-         * ========== TCP CONNECT ==========
+         * TCP/IP: Connect without Android permissions.
          */
         AsyncFunction("connectTCP") { address: String, port: Int, dpi: Int, widthMM: Double, nbrCharactersPerLine: Int ->
             val connection: DeviceConnection = try {
@@ -326,15 +315,15 @@ class ExpoDantsuEscposModule : Module() {
         if (adapter.isEnabled) return true
 
         val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        @Suppress("DEPRECATION")
         activity.startActivityForResult(intent, REQ_ENABLE_BT)
         Log.i(TAG, "Requested user to enable Bluetooth")
         return false
     }
 
     /**
-     * Fire a one-shot USB permission request for this device.
-     * We don't wait here; we simply show the dialog and return.
-     * Next call to connectUSB should see permission granted.
+     * One-shot USB permission request for a specific device.
+     * We don't wait; next call should see manager.hasPermission == true if granted.
      */
     private fun requestUsbPermissionOnce(
         activity: Activity,
@@ -351,7 +340,6 @@ class ExpoDantsuEscposModule : Module() {
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                // One-shot: unregister immediately
                 try {
                     context.unregisterReceiver(this)
                 } catch (_: Exception) {
@@ -376,7 +364,6 @@ class ExpoDantsuEscposModule : Module() {
             Log.i(TAG, "Requested USB permission for device ${device.deviceId}")
         } catch (e: SecurityException) {
             Log.e(TAG, "USB permission request failed: ${e.message}")
-            // Best effort cleanup
             runCatching { activity.unregisterReceiver(receiver) }
         }
     }

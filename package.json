@@ -1,6 +1,6 @@
 {
   "name": "expo-dantsu-escpos",
-  "version": "0.2.2",
+  "version": "0.3.1",
   "description": "Expo bridge for DantSu's ESCPOS-ThermalPrinter-Android library with enhanced Bluetooth support for corporate ROMs, insecure SPP connections, and comprehensive device discovery",
   "main": "build/index.js",
   "types": "build/index.d.ts",
